@@ -179,6 +179,41 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(response.data["students"]["total"], 1)
         self.assertEqual(response.data["attendance"]["by_status"]["present"], 1)
 
+    def test_admin_can_configure_attendance_hardware_settings(self):
+        self.authenticate(self.admin)
+        payload = {
+            "campus": self.campus.id,
+            "name": "Main Gate Nialabs Terminal",
+            "device_code": "NIALABS-MAIN-01",
+            "device_type": "face_recognition",
+            "location": "Main gate",
+            "provider": "Nialabs",
+            "status": "active",
+            "is_enabled_for_students": True,
+            "is_enabled_for_staff": True,
+            "server_required": True,
+            "use_domain_name": True,
+            "domain_name": "device.nialabs.in",
+            "server_ip": "192.168.000.109",
+            "server_port": 7743,
+            "heartbeat_seconds": 3,
+            "server_approval_required": False,
+            "device_numeric_id": 1,
+            "local_port": 5005,
+            "baud_rate": 38400,
+            "rs485_function": "software",
+        }
+
+        response = self.client.post("/api/v1/attendance-devices/", payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["domain_name"], "device.nialabs.in")
+        self.assertEqual(response.data["server_port"], 7743)
+        self.assertEqual(response.data["local_port"], 5005)
+        self.assertEqual(response.data["baud_rate"], 38400)
+        self.assertEqual(response.data["rs485_function"], "software")
+        self.assertEqual(response.data["configured_by"], self.admin.id)
+
     def test_parent_is_scoped_to_linked_student_and_cannot_read_audit(self):
         self.authenticate(self.parent)
 

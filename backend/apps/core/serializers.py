@@ -79,6 +79,17 @@ class AttendanceDeviceSerializer(serializers.ModelSerializer):
             "status",
             "is_enabled_for_students",
             "is_enabled_for_staff",
+            "server_required",
+            "use_domain_name",
+            "domain_name",
+            "server_ip",
+            "server_port",
+            "heartbeat_seconds",
+            "server_approval_required",
+            "device_numeric_id",
+            "local_port",
+            "baud_rate",
+            "rs485_function",
             "last_seen_at",
             "configured_by",
             "configured_by_name",
@@ -91,6 +102,23 @@ class AttendanceDeviceSerializer(serializers.ModelSerializer):
         if not obj.configured_by:
             return ""
         return obj.configured_by.get_full_name() or obj.configured_by.username
+
+    def validate(self, attrs):
+        instance = self.instance
+        default_domain_name = AttendanceDevice._meta.get_field("domain_name").default
+        default_server_ip = AttendanceDevice._meta.get_field("server_ip").default
+        server_required = attrs.get("server_required", getattr(instance, "server_required", True))
+        use_domain_name = attrs.get("use_domain_name", getattr(instance, "use_domain_name", True))
+        domain_name = attrs.get("domain_name", getattr(instance, "domain_name", default_domain_name)).strip()
+        server_ip = attrs.get("server_ip", getattr(instance, "server_ip", default_server_ip)).strip()
+
+        if server_required and use_domain_name and not domain_name:
+            raise serializers.ValidationError({"domain_name": "Domain name is required when domain mode is enabled."})
+        if server_required and not use_domain_name and not server_ip:
+            raise serializers.ValidationError({"server_ip": "Server IP is required when domain mode is disabled."})
+        attrs["domain_name"] = domain_name
+        attrs["server_ip"] = server_ip
+        return attrs
 
 
 class AcademicSessionSerializer(serializers.ModelSerializer):

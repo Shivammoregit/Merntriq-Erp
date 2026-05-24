@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -116,6 +117,12 @@ class DeviceStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     INACTIVE = "inactive", "Inactive"
     MAINTENANCE = "maintenance", "Maintenance"
+
+
+class RS485Function(models.TextChoices):
+    SOFTWARE = "software", "Software"
+    HARDWARE = "hardware", "Hardware"
+    DISABLED = "disabled", "Disabled"
 
 
 class StaffAttendanceStatus(models.TextChoices):
@@ -238,6 +245,17 @@ class AttendanceDevice(AuditModel):
     status = models.CharField(max_length=20, choices=DeviceStatus.choices, default=DeviceStatus.ACTIVE)
     is_enabled_for_students = models.BooleanField(default=True)
     is_enabled_for_staff = models.BooleanField(default=True)
+    server_required = models.BooleanField(default=True)
+    use_domain_name = models.BooleanField(default=True)
+    domain_name = models.CharField(max_length=180, blank=True, default="device.nialabs.in")
+    server_ip = models.CharField(max_length=45, blank=True, default="192.168.000.109")
+    server_port = models.PositiveIntegerField(default=7743, validators=[MinValueValidator(1), MaxValueValidator(65535)])
+    heartbeat_seconds = models.PositiveIntegerField(default=3, validators=[MinValueValidator(1), MaxValueValidator(3600)])
+    server_approval_required = models.BooleanField(default=False)
+    device_numeric_id = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(999999)])
+    local_port = models.PositiveIntegerField(default=5005, validators=[MinValueValidator(1), MaxValueValidator(65535)])
+    baud_rate = models.PositiveIntegerField(default=38400, validators=[MinValueValidator(1200), MaxValueValidator(921600)])
+    rs485_function = models.CharField(max_length=32, choices=RS485Function.choices, default=RS485Function.SOFTWARE)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     configured_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

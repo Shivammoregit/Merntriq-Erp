@@ -199,6 +199,7 @@ export interface CampusMembership {
 
 export type AttendanceCaptureMethod = "manual" | "face_recognition" | "fingerprint" | "card_scan";
 export type AttendanceDeviceStatus = "active" | "inactive" | "maintenance";
+export type AttendanceRS485Function = "software" | "hardware" | "disabled";
 
 export interface AttendanceDevice {
   id: number;
@@ -212,6 +213,17 @@ export interface AttendanceDevice {
   status: AttendanceDeviceStatus;
   is_enabled_for_students: boolean;
   is_enabled_for_staff: boolean;
+  server_required: boolean;
+  use_domain_name: boolean;
+  domain_name: string;
+  server_ip: string;
+  server_port: number;
+  heartbeat_seconds: number;
+  server_approval_required: boolean;
+  device_numeric_id: number;
+  local_port: number;
+  baud_rate: number;
+  rs485_function: AttendanceRS485Function;
   last_seen_at: string | null;
   configured_by: number | null;
   configured_by_name?: string;

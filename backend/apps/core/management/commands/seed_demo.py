@@ -738,6 +738,19 @@ class Command(BaseCommand):
                 },
             )
 
+        attendance_hardware_defaults = {
+            "server_required": True,
+            "use_domain_name": True,
+            "domain_name": "device.nialabs.in",
+            "server_ip": "192.168.000.109",
+            "server_port": 7743,
+            "heartbeat_seconds": 3,
+            "server_approval_required": False,
+            "local_port": 5005,
+            "baud_rate": 38400,
+            "rs485_function": "software",
+        }
+
         device_specs = {
             "main_face": {
                 "device_code": "M360-FACE-MAIN-01",
@@ -745,8 +758,10 @@ class Command(BaseCommand):
                 "name": "Main Gate Face Terminal",
                 "device_type": "face_recognition",
                 "location": "Main gate",
-                "provider": "Generic ONVIF terminal",
+                "provider": "Nialabs attendance terminal",
+                "device_numeric_id": 1,
                 "configured_by": users["admin"],
+                **attendance_hardware_defaults,
             },
             "main_card": {
                 "device_code": "M360-CARD-MAIN-02",
@@ -755,7 +770,9 @@ class Command(BaseCommand):
                 "device_type": "card_scan",
                 "location": "Library entry",
                 "provider": "RFID attendance reader",
+                "device_numeric_id": 2,
                 "configured_by": users["admin"],
+                **attendance_hardware_defaults,
             },
             "main_finger": {
                 "device_code": "M360-FINGER-STAFF-01",
@@ -764,9 +781,11 @@ class Command(BaseCommand):
                 "device_type": "fingerprint",
                 "location": "Staff room",
                 "provider": "Biometric attendance unit",
+                "device_numeric_id": 3,
                 "configured_by": users["admin"],
                 "is_enabled_for_students": False,
                 "is_enabled_for_staff": True,
+                **attendance_hardware_defaults,
             },
             "north_face": {
                 "device_code": "M360-NORTH-FACE-01",
@@ -774,8 +793,10 @@ class Command(BaseCommand):
                 "name": "North Gate Face Terminal",
                 "device_type": "face_recognition",
                 "location": "North campus gate",
-                "provider": "Generic ONVIF terminal",
+                "provider": "Nialabs attendance terminal",
+                "device_numeric_id": 4,
                 "configured_by": users["branch_admin"],
+                **attendance_hardware_defaults,
             },
         }
         devices = {}

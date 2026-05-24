@@ -9,6 +9,7 @@ import {
   Cpu,
   Fingerprint,
   IdCard,
+  PencilLine,
   Plus,
   RefreshCcw,
   ShieldCheck,
@@ -36,6 +37,10 @@ import {
   type StaffAttendanceStatus,
 } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
+import {
+  HardwareDeviceConfiguration,
+  type AttendanceDeviceConfigurationPayload,
+} from "@/components/attendance/hardware-device-configuration";
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -216,101 +221,6 @@ function MembershipForm({
         </div>
       </div>
       <FormActions busy={busy} label="Save membership" onCancel={onCancel} />
-    </form>
-  );
-}
-
-function DeviceForm({
-  campuses,
-  onSave,
-  onCancel,
-}: {
-  campuses: Campus[];
-  onSave: (data: Omit<AttendanceDevice, "id" | "campus_name" | "configured_by" | "configured_by_name" | "last_seen_at">) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState({
-    campus: String(campuses[0]?.id ?? ""),
-    name: "",
-    device_code: "",
-    device_type: "face_recognition" as AttendanceCaptureMethod,
-    location: "",
-    provider: "",
-    status: "active" as AttendanceDevice["status"],
-    is_enabled_for_students: true,
-    is_enabled_for_staff: true,
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      await onSave({ ...form, campus: Number(form.campus) });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Device save failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-4">
-      <ErrorNote message={error} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-medium text-ink">
-          Campus
-          <select className={`mt-1 ${inputCls}`} value={form.campus} onChange={(e) => setForm((f) => ({ ...f, campus: e.target.value }))} required>
-            {campuses.map((campus) => <option key={campus.id} value={campus.id}>{campus.name}</option>)}
-          </select>
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Device type
-          <select className={`mt-1 ${inputCls}`} value={form.device_type} onChange={(e) => setForm((f) => ({ ...f, device_type: e.target.value as AttendanceCaptureMethod }))}>
-            <option value="face_recognition">Face Recognition</option>
-            <option value="fingerprint">Fingerprint</option>
-            <option value="card_scan">Card Scan</option>
-            <option value="manual">Manual Kiosk</option>
-          </select>
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Device name
-          <input className={`mt-1 ${inputCls}`} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required placeholder="Main Gate Face Terminal" />
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Device code
-          <input className={`mt-1 ${inputCls}`} value={form.device_code} onChange={(e) => setForm((f) => ({ ...f, device_code: e.target.value }))} required placeholder="M360-FACE-01" />
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Location
-          <input className={`mt-1 ${inputCls}`} value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} />
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Provider
-          <input className={`mt-1 ${inputCls}`} value={form.provider} onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))} />
-        </label>
-        <label className="block text-sm font-medium text-ink">
-          Status
-          <select className={`mt-1 ${inputCls}`} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as AttendanceDevice["status"] }))}>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="maintenance">Maintenance</option>
-          </select>
-        </label>
-        <div className="grid content-end gap-2">
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="checkbox" checked={form.is_enabled_for_students} onChange={(e) => setForm((f) => ({ ...f, is_enabled_for_students: e.target.checked }))} />
-            Enable for students
-          </label>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="checkbox" checked={form.is_enabled_for_staff} onChange={(e) => setForm((f) => ({ ...f, is_enabled_for_staff: e.target.checked }))} />
-            Enable for staff
-          </label>
-        </div>
-      </div>
-      <FormActions busy={busy} label="Save device" onCancel={onCancel} />
     </form>
   );
 }
@@ -530,6 +440,7 @@ export function CampusControlPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ControlView | null>(null);
+  const [deviceToEdit, setDeviceToEdit] = useState<AttendanceDevice | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -566,6 +477,7 @@ export function CampusControlPanel() {
 
   async function refreshAfterSave() {
     setModal(null);
+    setDeviceToEdit(null);
     await load();
   }
 
@@ -651,7 +563,10 @@ export function CampusControlPanel() {
         ))}
         <button
           type="button"
-          onClick={() => setModal(activeView)}
+          onClick={() => {
+            if (activeView === "devices") setDeviceToEdit(null);
+            setModal(activeView);
+          }}
           className="ml-auto flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5"
         >
           <Plus size={14} />
@@ -705,6 +620,7 @@ export function CampusControlPanel() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {devices.map((device) => {
             const Icon = methodIcons[device.device_type];
+            const serverTarget = device.use_domain_name ? device.domain_name : device.server_ip;
             return (
               <article key={device.id} className="surface p-5 shadow-soft">
                 <div className="flex items-start justify-between gap-3">
@@ -723,12 +639,31 @@ export function CampusControlPanel() {
                   <p>{device.campus_name}</p>
                   <p>{captureLabels[device.device_type]} - {device.location || "No location"}</p>
                   <p>Students: {device.is_enabled_for_students ? "enabled" : "disabled"} / Staff: {device.is_enabled_for_staff ? "enabled" : "disabled"}</p>
+                  <div className="rounded-lg border border-line/70 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                    <p><span className="font-semibold text-ink">Server:</span> {serverTarget || "not configured"}:{device.server_port || "-"}</p>
+                    <p><span className="font-semibold text-ink">Heartbeat:</span> {device.heartbeat_seconds || "-"} sec / Approval: {device.server_approval_required ? "Yes" : "No"}</p>
+                    <p><span className="font-semibold text-ink">Comm:</span> ID {device.device_numeric_id || "-"}, Port {device.local_port || "-"}, Baud {device.baud_rate || "-"}</p>
+                    <p><span className="font-semibold text-ink">RS485:</span> {device.rs485_function || "software"}</p>
+                  </div>
                   <p>Last seen: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString("en-IN") : "not reported"}</p>
                 </div>
-                <button type="button" onClick={() => removeDevice(device.id)} className="mt-4 inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50">
-                  <Trash2 size={12} />
-                  Remove
-                </button>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeviceToEdit(device);
+                      setModal("devices");
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-line/70 px-3 py-1.5 text-xs font-medium text-ink hover:bg-slate-50"
+                  >
+                    <PencilLine size={12} />
+                    Configure
+                  </button>
+                  <button type="button" onClick={() => removeDevice(device.id)} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50">
+                    <Trash2 size={12} />
+                    Remove
+                  </button>
+                </div>
               </article>
             );
           })}
@@ -814,11 +749,23 @@ export function CampusControlPanel() {
         }} onCancel={() => setModal(null)} />
       </Modal>
 
-      <Modal open={modal === "devices"} onClose={() => setModal(null)} title="Add Attendance Device" size="lg">
-        <DeviceForm campuses={campuses} onSave={async (data) => {
-          await attendanceDeviceApi.create(data);
+      <Modal
+        open={modal === "devices"}
+        onClose={() => {
+          setDeviceToEdit(null);
+          setModal(null);
+        }}
+        title={deviceToEdit ? "Configure Attendance Device" : "Add Attendance Device"}
+        size="xl"
+      >
+        <HardwareDeviceConfiguration campuses={campuses} device={deviceToEdit} onSave={async (data: AttendanceDeviceConfigurationPayload) => {
+          if (deviceToEdit) await attendanceDeviceApi.update(deviceToEdit.id, data);
+          else await attendanceDeviceApi.create(data);
           await refreshAfterSave();
-        }} onCancel={() => setModal(null)} />
+        }} onCancel={() => {
+          setDeviceToEdit(null);
+          setModal(null);
+        }} />
       </Modal>
 
       <Modal open={modal === "staff"} onClose={() => setModal(null)} title="Record Staff Attendance" size="lg">
