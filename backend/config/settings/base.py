@@ -15,6 +15,7 @@ env = environ.Env(
     DJANGO_THROTTLE_ANON_RATE=(str, "30/minute"),
     DJANGO_THROTTLE_USER_RATE=(str, "300/minute"),
     DJANGO_THROTTLE_AUTH_RATE=(str, "10/minute"),
+    DJANGO_THROTTLE_CAPTCHA_RATE=(str, "30/minute"),
     DJANGO_THROTTLE_HARDWARE_CAPTURE_RATE=(str, "1200/minute"),
     DJANGO_CACHE_URL=(str, ""),
 )
@@ -155,6 +156,7 @@ REST_FRAMEWORK = {
         "anon": env("DJANGO_THROTTLE_ANON_RATE"),
         "user": env("DJANGO_THROTTLE_USER_RATE"),
         "auth": env("DJANGO_THROTTLE_AUTH_RATE"),
+        "captcha": env("DJANGO_THROTTLE_CAPTCHA_RATE"),
         "hardware_capture": env("DJANGO_THROTTLE_HARDWARE_CAPTURE_RATE"),
     },
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Eye,
@@ -16,11 +16,10 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError } from "@/lib/api";
+import { ApiError, authApi, type CaptchaChallenge } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 
 const DEMO_PASSWORD = "Mentriq@123";
-const CAPTCHA_CODE = "2133";
 
 type DemoAccount = {
   role: string;
@@ -343,6 +342,8 @@ export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [captcha, setCaptcha] = useState("");
+  const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge | null>(null);
+  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [remember, setRemember] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showPasswordHelp, setShowPasswordHelp] = useState(false);
@@ -360,15 +361,43 @@ export function LoginPage() {
     );
   }, [accountSearch]);
 
+  const loadCaptcha = useCallback(async (clearError = true) => {
+    setCaptchaLoading(true);
+    if (clearError) setError("");
+    try {
+      const challenge = await authApi.captcha();
+      setCaptchaChallenge(challenge);
+      setCaptcha("");
+    } catch (err) {
+      setCaptchaChallenge(null);
+      setError(err instanceof ApiError ? err.message : "Captcha could not be loaded. Check the server connection.");
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCaptcha(false);
+  }, [loadCaptcha]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) return;
+    if (!captchaChallenge) {
+      setError("Captcha is not ready. Refresh the captcha and try again.");
+      return;
+    }
+    if (!captcha.trim()) {
+      setError("Enter the captcha code shown on the screen.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, captchaChallenge.challenge_id, captcha.trim());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
+      void loadCaptcha(false);
     } finally {
       setBusy(false);
     }
@@ -377,7 +406,6 @@ export function LoginPage() {
   function fillDemoAccount(usernameValue: string) {
     setUsername(usernameValue);
     setPassword(DEMO_PASSWORD);
-    setCaptcha(CAPTCHA_CODE);
     setError("");
   }
 
@@ -491,11 +519,28 @@ export function LoginPage() {
               <div className="grid gap-3 sm:grid-cols-[1fr_8.5rem]">
                 <div>
                   <span className="mb-1.5 block text-sm font-semibold text-ink">Captcha</span>
-                  <div className="flex items-center gap-2 rounded-md border border-line bg-slate-50 px-3 py-2.5">
-                    <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink" aria-label="Refresh captcha">
-                      <RefreshCcw size={17} />
+                  <div className="flex min-h-[3.75rem] items-center gap-2 rounded-md border border-line bg-slate-50 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => void loadCaptcha()}
+                      disabled={captchaLoading || busy}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Refresh captcha"
+                    >
+                      {captchaLoading ? <Spinner size={15} /> : <RefreshCcw size={17} />}
                     </button>
-                    <span className="select-none text-2xl font-black tracking-[0.22em] text-red-600">{CAPTCHA_CODE}</span>
+                    {captchaChallenge?.image ? (
+                      <span
+                        role="img"
+                        aria-label="Captcha challenge"
+                        className="h-[3.1rem] w-full max-w-[11.5rem] select-none rounded-md border border-line/70 bg-white bg-cover bg-center"
+                        style={{ backgroundImage: `url(${captchaChallenge.image})` }}
+                      />
+                    ) : (
+                      <span className="flex h-[3.1rem] flex-1 items-center justify-center rounded-md border border-dashed border-line/80 bg-white text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                        Loading
+                      </span>
+                    )}
                   </div>
                 </div>
                 <label htmlFor="login-captcha" className="block">
@@ -503,8 +548,10 @@ export function LoginPage() {
                   <input
                     id="login-captcha"
                     value={captcha}
-                    onChange={(e) => setCaptcha(e.target.value)}
+                    onChange={(e) => setCaptcha(e.target.value.toUpperCase().replace(/\s/g, ""))}
                     placeholder="Code"
+                    autoComplete="off"
+                    maxLength={8}
                     className="w-full rounded-md border border-line bg-white px-3 py-3 text-sm text-ink outline-none placeholder:text-slate-400"
                   />
                 </label>
@@ -540,7 +587,7 @@ export function LoginPage() {
             <button
               id="login-submit"
               type="submit"
-              disabled={busy || !username || !password}
+              disabled={busy || captchaLoading || !captchaChallenge || !username || !password || !captcha}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-md bg-red-600 py-3 text-base font-semibold text-white shadow-md transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? <Spinner size={16} /> : null}

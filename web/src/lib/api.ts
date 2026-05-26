@@ -165,6 +165,13 @@ export interface LoginResponse {
   user: User;
 }
 
+export interface CaptchaChallenge {
+  challenge_id: string;
+  image: string;
+  expires_in: number;
+  expires_at: string;
+}
+
 export interface Campus {
   id: number;
   name: string;
@@ -566,10 +573,12 @@ export interface PagedResponse<T> {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (username: string, password: string) =>
+  captcha: () => apiFetch<CaptchaChallenge>(`${AUTH_BASE}/captcha/`),
+
+  login: (username: string, password: string, captcha_id: string, captcha_answer: string) =>
     apiFetch<LoginResponse>(`${AUTH_BASE}/token/`, {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, captcha_id, captcha_answer }),
     }),
 
   me: () => apiFetch<User>(`${AUTH_BASE}/me/`),

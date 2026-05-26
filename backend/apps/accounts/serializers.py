@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .captcha import validate_captcha_response
 from .models import User, UserRole
 
 
@@ -178,6 +179,9 @@ class UserAdminSerializer(serializers.ModelSerializer):
 
 
 class ERPTokenObtainPairSerializer(TokenObtainPairSerializer):
+    captcha_id = serializers.CharField(write_only=True, required=True)
+    captcha_answer = serializers.CharField(write_only=True, required=True, trim_whitespace=True)
+
     @classmethod
     def get_token(cls, user: User):
         token = super().get_token(user)
@@ -186,6 +190,12 @@ class ERPTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
+        captcha_id = attrs.pop("captcha_id", "")
+        captcha_answer = attrs.pop("captcha_answer", "")
+        if not validate_captcha_response(captcha_id, captcha_answer):
+            raise serializers.ValidationError(
+                {"captcha_answer": "Captcha is incorrect or expired. Refresh the captcha and try again."}
+            )
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data

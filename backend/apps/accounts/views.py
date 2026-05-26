@@ -1,5 +1,5 @@
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.core.models import AuditAction, AuditEvent
 from apps.core.permissions import RoleAccessPermission
 
+from .captcha import generate_captcha_challenge
 from .models import User, UserRole
 from .serializers import ERPTokenObtainPairSerializer, UserAdminSerializer, UserSerializer
 
@@ -39,6 +40,23 @@ class ERPTokenObtainPairView(TokenObtainPairView):
                     ip_address=get_client_ip(request),
                 )
         return response
+
+
+class CaptchaChallengeView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_scope = "captcha"
+
+    def get(self, request):
+        challenge = generate_captcha_challenge()
+        return Response(
+            {
+                "challenge_id": challenge.challenge_id,
+                "image": challenge.image,
+                "expires_in": challenge.expires_in,
+                "expires_at": challenge.expires_at,
+            }
+        )
 
 
 class CurrentUserView(APIView):
