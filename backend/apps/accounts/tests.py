@@ -22,7 +22,7 @@ class LoginCaptchaTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("challenge_id", response.data)
         self.assertIn("expires_in", response.data)
-        self.assertTrue(response.data["image"].startswith("data:image/svg+xml;base64,"))
+        self.assertTrue(response.data["image"].startswith("data:image/png;base64,"))
 
     def test_login_requires_valid_captcha(self):
         missing = self.client.post(
