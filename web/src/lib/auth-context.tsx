@@ -22,15 +22,20 @@ import {
 const LAST_ACTIVITY_KEY = "erp_last_activity";
 const IDLE_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_SESSION_IDLE_MINUTES ?? "30") * 60 * 1000;
 const SESSION_VALIDATE_MS = Number(process.env.NEXT_PUBLIC_SESSION_VALIDATE_SECONDS ?? "300") * 1000;
-const ACTIVITY_EVENTS = ["click", "keydown", "mousemove", "scroll", "touchstart", "visibilitychange"];
+const ACTIVITY_EVENTS = ["click", "keydown", "mousemove", "pointerdown", "scroll", "touchstart"];
 
 function markActivity() {
   localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
 }
 
 function isIdleExpired() {
-  const lastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY) ?? Date.now());
-  return Date.now() - lastActivity > IDLE_TIMEOUT_MS;
+  const storedActivity = localStorage.getItem(LAST_ACTIVITY_KEY);
+  if (!storedActivity) return true;
+
+  const lastActivity = Number(storedActivity);
+  if (!Number.isFinite(lastActivity)) return true;
+
+  return Date.now() - lastActivity >= IDLE_TIMEOUT_MS;
 }
 
 interface AuthState {
@@ -82,12 +87,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearTokens();
     localStorage.removeItem(LAST_ACTIVITY_KEY);
     setUser(null);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
     function expireSession() {
+      clearTokens();
       setUser(null);
       localStorage.removeItem(LAST_ACTIVITY_KEY);
+      setLoading(false);
     }
 
     window.addEventListener(SESSION_EXPIRED_EVENT, expireSession);
@@ -98,18 +106,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
 
     const recordActivity = () => markActivity();
-    ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, recordActivity, { passive: true }));
-
-    const idleTimer = window.setInterval(() => {
+    const expireIfIdle = () => {
       if (isIdleExpired()) logout();
-    }, 30_000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") expireIfIdle();
+    };
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === LAST_ACTIVITY_KEY && event.newValue === null) {
+        logout();
+      }
+    };
+
+    ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, recordActivity, { passive: true }));
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", expireIfIdle);
+    window.addEventListener("storage", handleStorageChange);
+
+    const idleTimer = window.setInterval(expireIfIdle, 30_000);
 
     const validationTimer = window.setInterval(() => {
+      if (isIdleExpired()) {
+        logout();
+        return;
+      }
       authApi.me().then(setUser).catch(logout);
     }, SESSION_VALIDATE_MS);
 
     return () => {
       ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, recordActivity));
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", expireIfIdle);
+      window.removeEventListener("storage", handleStorageChange);
       window.clearInterval(idleTimer);
       window.clearInterval(validationTimer);
     };
