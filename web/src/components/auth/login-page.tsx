@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -371,7 +372,7 @@ export function LoginPage() {
     <main className="login-shell">
       <section className="login-frame">
         <aside className="login-hero" aria-label="MentriQ360 ERP overview">
-          <div className="relative z-10 flex h-full flex-col justify-between p-6 lg:p-8 xl:p-10">
+          <div className="relative z-10 flex h-full flex-col gap-6 p-6 lg:p-8 xl:p-10">
             <div className="flex items-center justify-between gap-4">
               <BrandLogo size="lg" />
               <span className="rounded-md border border-line/70 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted shadow-sm">
@@ -379,7 +380,18 @@ export function LoginPage() {
               </span>
             </div>
 
-            <div className="max-w-2xl py-10">
+            <div className="login-school-photo" aria-hidden="true">
+              <Image
+                src="/login-school-campus.jpg"
+                alt=""
+                fill
+                priority
+                sizes="(min-width: 1024px) 48vw, 0px"
+                className="object-cover"
+              />
+            </div>
+
+            <div className="max-w-2xl py-6">
               <span className="inline-flex rounded-md border border-blue-100 bg-accent-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent-strong">
                 Secure ERP login
               </span>
@@ -391,7 +403,7 @@ export function LoginPage() {
               </p>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-3">
+            <div className="mt-auto grid gap-3 xl:grid-cols-3">
               {LOGIN_FEATURES.map(({ label, value }) => (
                 <div key={label} className="rounded-lg border border-line/70 bg-white/90 p-4 text-ink shadow-sm backdrop-blur">
                   <p className="text-sm font-semibold">{label}</p>
