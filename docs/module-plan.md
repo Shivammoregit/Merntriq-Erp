@@ -19,7 +19,7 @@ Frontend:
 
 Outcome:
 
-- Admin, teacher, and parent users enter different workspaces after login.
+- Admin, teacher, student, and parent users enter different workspaces after login.
 
 ## Phase 2: Admin Master Data
 
@@ -38,11 +38,11 @@ Frontend:
 - Academic session setup
 - Class and teacher assignment
 - Student admission form
-- Parent linking
+- Guardian contact details
 
 Outcome:
 
-- Student records are created once and reused by attendance, fees, reports, and parent dashboards.
+- Student records are created once and reused by attendance, fees, reports, and student dashboards.
 
 ## Phase 3: Attendance Flow
 
@@ -61,7 +61,7 @@ Frontend:
 
 Outcome:
 
-- Daily attendance is stored and immediately visible to admin reports and linked parents.
+- Daily attendance is stored and immediately visible to admin reports and linked students.
 
 ## Phase 4: Fees and Payments
 
@@ -83,22 +83,51 @@ Outcome:
 
 - Admin users can assign fees, collect payments, and track dues.
 
-## Phase 5: Parent Visibility
+## Phase 5: Student and Parent Visibility
 
 Backend:
 
-- Parent-scoped querysets
+- Student-scoped querysets
 - Student, attendance, fee, and payment read access
+- Parent-scoped querysets through `StudentGuardian`
 
 Frontend:
 
 - Student profile
 - Attendance summary
 - Fee status and payment history
+- Family portal view for linked students
 
 Outcome:
 
-- Parents can view only linked student records.
+- Students view only their own records. Parents view only records linked through guardian relationships.
+
+## Phase 7: Operational Services
+
+Backend:
+
+- `StaffProfile`
+- `TimetableSlot`
+- `LibraryBook`
+- `LibraryLoan`
+- `TransportRoute`
+- `TransportVehicle`
+- `StudentTransportAssignment`
+- `HostelRoom`
+- `HostelAllocation`
+
+Frontend:
+
+- Operations workspace
+- Staff profile table and quick-create form
+- Timetable slot management
+- Library catalog and loan visibility
+- Transport route and vehicle management
+- Hostel room and allocation visibility
+
+Outcome:
+
+- Campus admins manage operational services while teachers, students, and parents receive scoped read access.
 
 ## Phase 6: Reports and Audit
 
@@ -124,9 +153,8 @@ Outcome:
 
 Recommended next modules:
 
-- Timetable and academic calendar
-- Exams and report cards
-- Notifications and parent messaging
-- Transport and hostel
+- Academic calendar conflict detection
+- Certificate and transfer certificate workflows
+- Notifications and parent messaging delivery providers
 - Inventory and procurement
 - Payroll and HR

@@ -16,13 +16,23 @@ from .views import (
     DashboardSummaryView,
     FeeAssignmentViewSet,
     HealthCheckView,
+    HostelAllocationViewSet,
+    HostelRoomViewSet,
+    LibraryBookViewSet,
+    LibraryLoanViewSet,
     LearningResourceViewSet,
     PaymentViewSet,
     ResultRecordViewSet,
     StaffAttendanceRecordViewSet,
+    StaffProfileViewSet,
     StudentGuardianViewSet,
     StudentViewSet,
+    StudentTransportAssignmentViewSet,
     SupportTicketViewSet,
+    TeacherSubjectAllocationViewSet,
+    TimetableSlotViewSet,
+    TransportRouteViewSet,
+    TransportVehicleViewSet,
 )
 
 router = DefaultRouter()
@@ -31,10 +41,20 @@ router.register("campus-memberships", CampusMembershipViewSet, basename="campus-
 router.register("attendance-devices", AttendanceDeviceViewSet, basename="attendance-device")
 router.register("academic-sessions", AcademicSessionViewSet, basename="academic-session")
 router.register("sections", ClassSectionViewSet, basename="section")
+router.register("teacher-subject-allocations", TeacherSubjectAllocationViewSet, basename="teacher-subject-allocation")
 router.register("students", StudentViewSet, basename="student")
 router.register("student-guardians", StudentGuardianViewSet, basename="student-guardian")
 router.register("attendance-records", AttendanceRecordViewSet, basename="attendance-record")
 router.register("staff-attendance-records", StaffAttendanceRecordViewSet, basename="staff-attendance-record")
+router.register("staff-profiles", StaffProfileViewSet, basename="staff-profile")
+router.register("timetable-slots", TimetableSlotViewSet, basename="timetable-slot")
+router.register("library-books", LibraryBookViewSet, basename="library-book")
+router.register("library-loans", LibraryLoanViewSet, basename="library-loan")
+router.register("transport-routes", TransportRouteViewSet, basename="transport-route")
+router.register("transport-vehicles", TransportVehicleViewSet, basename="transport-vehicle")
+router.register("student-transport-assignments", StudentTransportAssignmentViewSet, basename="student-transport-assignment")
+router.register("hostel-rooms", HostelRoomViewSet, basename="hostel-room")
+router.register("hostel-allocations", HostelAllocationViewSet, basename="hostel-allocation")
 router.register("announcements", AnnouncementViewSet, basename="announcement")
 router.register("approval-requests", ApprovalRequestViewSet, basename="approval-request")
 router.register("support-tickets", SupportTicketViewSet, basename="support-ticket")

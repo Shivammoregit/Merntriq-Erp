@@ -9,18 +9,15 @@ import {
   CalendarDays,
   ChevronDown,
   ClipboardCheck,
-  CreditCard,
   ExternalLink,
   FileText,
   GraduationCap,
-  Home,
   MapPin,
   Printer,
   RefreshCcw,
   ReceiptText,
   X,
   UserRound,
-  UsersRound,
 } from "lucide-react";
 
 import {
@@ -44,7 +41,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Badge, statusBadge, statusLabel } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
 type StudentView = "overview" | "profile" | "lms" | "fees" | "attendance" | "results" | "work" | "resources" | "admit";
 
@@ -99,31 +96,6 @@ function scorePercent(result: ResultRecord) {
   return max ? Math.round((Number(result.score) / max) * 100) : 0;
 }
 
-function MetricCard({
-  label,
-  value,
-  note,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | number;
-  note: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-}) {
-  return (
-    <div className="surface p-5 shadow-soft">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</p>
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ink text-white">
-          <Icon size={18} />
-        </div>
-      </div>
-      <p className="display-font mt-3 text-3xl font-bold text-ink">{value}</p>
-      <p className="mt-1 text-xs text-muted">{note}</p>
-    </div>
-  );
-}
-
 function EmptyState({ label }: { label: string }) {
   return (
     <div className="surface py-14 text-center shadow-soft">
@@ -137,7 +109,7 @@ function profileValue(value?: string | null) {
 }
 
 function pageTitleFor(view: StudentView, role?: string) {
-  if (view === "overview") return "Student Dashboard";
+  if (view === "overview") return role === "parent" ? "Family Dashboard" : "Student Dashboard";
   if (view === "profile") return "Student Complete Detail";
   if (view === "lms") return "Select Course";
   if (view === "fees") return "Online Payment";
@@ -146,7 +118,7 @@ function pageTitleFor(view: StudentView, role?: string) {
   if (view === "work") return "Homework & Assignment";
   if (view === "resources") return "Course Registered";
   if (view === "admit") return "Admit Card";
-  return role === "parent" ? "Student Complete Detail" : "Student Dashboard";
+  return "Student Dashboard";
 }
 
 function InfoRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -455,6 +427,31 @@ function LmsSelectCoursePage({ student }: { student: Student }) {
   );
 }
 
+function StudentQuickTabs({
+  activeView,
+  setActiveView,
+}: {
+  activeView: StudentView;
+  setActiveView: (view: StudentView) => void;
+}) {
+  return (
+    <nav className="surface student-tabs shadow-soft" aria-label="Student workspace">
+      {studentViews.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setActiveView(id)}
+          aria-current={activeView === id ? "page" : undefined}
+          className={`student-tab ${activeView === id ? "student-tab-active" : ""}`}
+        >
+          <Icon size={15} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 export function StudentDashboard() {
   const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
@@ -544,28 +541,16 @@ export function StudentDashboard() {
 
   const presentCount = visibleAttendance.filter((item) => item.status === "present").length;
   const attendancePct = visibleAttendance.length ? Math.round((presentCount / visibleAttendance.length) * 100) : 0;
-  const averageScore = useMemo(() => {
-    if (!visibleResults.length) return 0;
-    return Math.round(visibleResults.reduce((total, item) => total + scorePercent(item), 0) / visibleResults.length);
-  }, [visibleResults]);
   const openWork = visibleWork.filter((item) => item.status !== "closed");
   const latestAdmitCard = visibleAdmitCards.find((card) => card.status === "issued") ?? visibleAdmitCards[0];
-  const latestResource = visibleResources[0];
   const outstandingAmount = visibleFees.reduce((total, item) => {
     const openAmount = item.outstanding_amount ?? (item.status === "paid" ? 0 : item.amount);
     return total + amountValue(openAmount);
   }, 0);
   const paidAmount = visibleFees.reduce((total, item) => total + amountValue(item.amount_paid), 0);
-  const portalLabel = user?.role === "parent" ? "Family portal" : "Student portal";
-  const portalMode = user?.role === "parent" ? "Guardian read-only access" : "Learner read-only access";
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-muted">Loading student workspace...</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Student workspace" detail="Preparing attendance, LMS, fees, and results." />;
   }
 
   if (error) {
@@ -586,123 +571,45 @@ export function StudentDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="mastersoft-page-title">
-        {pageTitleFor(activeView, user?.role)}
+      <div className="mastersoft-page-title flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <span className="block truncate">{pageTitleFor(activeView, user?.role)}</span>
+          <span className="mt-1 block text-sm font-medium text-muted">
+            {student.full_name} - {student.admission_number}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {students.length > 1 && (
+            <label className="flex min-w-0 items-center gap-2 rounded-md border border-line/70 bg-white px-3 py-2 text-sm text-muted shadow-sm">
+              <span className="shrink-0 font-medium">Learner</span>
+              <select
+                value={student.id}
+                onChange={(event) => setSelectedStudentId(Number(event.target.value))}
+                className="min-h-0 min-w-0 max-w-[13rem] border-0 bg-transparent p-0 font-medium text-ink outline-none"
+                aria-label="Select learner"
+              >
+                {students.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.full_name} ({item.admission_number})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-line/70 bg-white px-3 text-sm font-medium text-muted shadow-sm hover:bg-slate-50 hover:text-ink"
+          >
+            <RefreshCcw size={14} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {activeView === "overview" && (
-        <>
-      <section className="surface overflow-hidden shadow-soft">
-        <div className="grid gap-0 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="p-5 md:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex min-w-0 items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-ink text-2xl font-bold text-white shadow-sm">
-                  {student.full_name[0]?.toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <span className="section-kicker">
-                    <GraduationCap size={14} />
-                    {portalLabel}
-                  </span>
-                  <h1 className="display-font mt-3 break-words text-2xl font-semibold text-ink md:text-3xl">{student.full_name}</h1>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant={statusBadge(student.status)}>{student.status}</Badge>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
-                      {student.admission_number}
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-600">
-                      {profileValue(student.section_label)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={load}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-line/70 bg-white px-4 py-2 text-sm font-medium text-muted transition hover:bg-slate-50 hover:text-ink"
-              >
-                <RefreshCcw size={14} />
-                Refresh
-              </button>
-            </div>
+      <StudentQuickTabs activeView={activeView} setActiveView={setActiveView} />
 
-            {students.length > 1 && (
-              <label className="mt-5 flex max-w-xl items-center gap-2 rounded-2xl border border-line/70 bg-slate-50 px-3 py-2 text-sm text-muted">
-                <UsersRound size={14} />
-                <span className="shrink-0 font-medium">Learner</span>
-                <select
-                  value={student.id}
-                  onChange={(event) => setSelectedStudentId(Number(event.target.value))}
-                  className="min-w-0 flex-1 bg-transparent font-medium text-ink outline-none"
-                  aria-label="Select learner"
-                >
-                  {students.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.full_name} ({item.admission_number})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-
-          <div className="border-t border-line/60 bg-slate-50/80 p-5 md:p-6 xl:border-l xl:border-t-0">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                { label: "Class", value: profileValue(student.section_label), icon: BookOpen },
-                { label: "Campus", value: profileValue(student.campus_name), icon: Home },
-                { label: "Portal", value: portalMode, icon: BadgeCheck },
-                { label: "Last update", value: latestResource ? formatDate(latestResource.published_on) : "No update", icon: CalendarDays },
-              ].map(({ label, value, icon: Icon }) => (
-                <div key={label} className="rounded-2xl border border-line/70 bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-ink">{value}</p>
-                    </div>
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-ink">
-                      <Icon size={16} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Attendance" value={`${attendancePct}%`} note={`${presentCount} present / ${visibleAttendance.length} days`} icon={ClipboardCheck} />
-        <MetricCard label="Homework" value={openWork.length} note={`${visibleWork.length} total records`} icon={BookOpen} />
-        <MetricCard label="Average Result" value={`${averageScore}%`} note={`${visibleResults.length} published marks`} icon={Award} />
-        <MetricCard label="Fee Due" value={formatMoney(outstandingAmount)} note={`${visiblePayments.length} payment records`} icon={CreditCard} />
-      </section>
-        </>
-      )}
-
-      <section className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <aside className="surface h-fit overflow-hidden p-3 shadow-soft lg:sticky lg:top-[5rem]">
-          <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible" aria-label="Student sections">
-            {studentViews.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveView(id)}
-                className={`flex shrink-0 items-center gap-2 rounded-md border-l-4 px-3 py-3 text-left text-sm font-medium transition lg:w-full ${
-                  activeView === id
-                    ? "border-l-accent bg-accent-soft text-accent-strong shadow-sm"
-                    : "border-l-transparent bg-white text-slate-700 hover:bg-slate-50 hover:text-ink"
-                }`}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-6">
           {activeView === "overview" && (
             <StudentHomePage
               attendancePct={attendancePct}
@@ -760,8 +667,7 @@ export function StudentDashboard() {
           )}
           {activeView === "resources" && <ResourceList items={visibleResources} />}
           {activeView === "admit" && <AdmitCardPanel card={latestAdmitCard} />}
-        </div>
-      </section>
+      </div>
     </div>
   );
 }

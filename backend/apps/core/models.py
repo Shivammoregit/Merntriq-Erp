@@ -20,6 +20,18 @@ class Campus(AuditModel):
     name = models.CharField(max_length=120)
     code = models.CharField(max_length=20, unique=True)
     address = models.TextField(blank=True)
+    logo_url = models.TextField(blank=True)
+    logo_alt_text = models.CharField(max_length=160, blank=True)
+    database_alias = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Optional Django database alias used when this campus is isolated in its own database.",
+    )
+    database_name = models.CharField(
+        max_length=128,
+        blank=True,
+        help_text="Optional physical database name for operator reference.",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -69,6 +81,39 @@ class ClassSection(AuditModel):
     def clean(self) -> None:
         if self.session_id and self.campus_id and self.session.campus_id != self.campus_id:
             raise ValidationError({"session": "Session must belong to the selected campus."})
+
+
+class TeacherSubjectAllocation(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="teacher_subject_allocations")
+    section = models.ForeignKey(ClassSection, on_delete=models.CASCADE, related_name="subject_allocations")
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="subject_allocations",
+    )
+    subject = models.CharField(max_length=80)
+    weekly_periods = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(60)])
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["campus__name", "section__grade_name", "section__section_name", "subject"]
+        unique_together = ("section", "teacher", "subject")
+        indexes = [
+            models.Index(fields=["teacher", "is_active"]),
+            models.Index(fields=["campus", "subject"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.teacher} - {self.section} - {self.subject}"
+
+    def clean(self) -> None:
+        self.subject = (self.subject or "").strip()
+        if self.section_id and self.campus_id and self.section.campus_id != self.campus_id:
+            raise ValidationError({"section": "Section must belong to the selected campus."})
+        if self.teacher_id and getattr(self.teacher, "role", None) != "teacher":
+            raise ValidationError({"teacher": "Subject allocation must be assigned to a teacher user."})
+        if not self.subject:
+            raise ValidationError({"subject": "Subject is required."})
 
 
 class StudentStatus(models.TextChoices):
@@ -131,6 +176,40 @@ class StaffAttendanceStatus(models.TextChoices):
     LATE = "late", "Late"
     HALF_DAY = "half_day", "Half Day"
     ON_LEAVE = "on_leave", "On Leave"
+
+
+class StaffEmploymentType(models.TextChoices):
+    FULL_TIME = "full_time", "Full time"
+    PART_TIME = "part_time", "Part time"
+    CONTRACT = "contract", "Contract"
+
+
+class StaffProfileStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    EXITED = "exited", "Exited"
+
+
+class Weekday(models.IntegerChoices):
+    MONDAY = 1, "Monday"
+    TUESDAY = 2, "Tuesday"
+    WEDNESDAY = 3, "Wednesday"
+    THURSDAY = 4, "Thursday"
+    FRIDAY = 5, "Friday"
+    SATURDAY = 6, "Saturday"
+    SUNDAY = 7, "Sunday"
+
+
+class LibraryBookStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    LOST = "lost", "Lost"
+
+
+class LibraryLoanStatus(models.TextChoices):
+    ISSUED = "issued", "Issued"
+    RETURNED = "returned", "Returned"
+    OVERDUE = "overdue", "Overdue"
 
 
 class ApprovalStatus(models.TextChoices):
@@ -324,7 +403,7 @@ class StudentGuardian(AuditModel):
         on_delete=models.CASCADE,
         related_name="student_links",
     )
-    relationship = models.CharField(max_length=40, default="Parent")
+    relationship = models.CharField(max_length=40, default="Guardian")
 
     class Meta:
         unique_together = ("student", "guardian")
@@ -337,6 +416,7 @@ class AttendanceRecord(AuditModel):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="attendance_records")
     section = models.ForeignKey(ClassSection, on_delete=models.CASCADE, related_name="attendance_records")
     date = models.DateField()
+    subject = models.CharField(max_length=80, blank=True, default="")
     status = models.CharField(max_length=20, choices=AttendanceStatus.choices)
     marked_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -362,12 +442,16 @@ class AttendanceRecord(AuditModel):
 
     class Meta:
         ordering = ["-date", "student__first_name"]
-        unique_together = ("student", "date")
+        unique_together = ("student", "date", "subject")
+        indexes = [
+            models.Index(fields=["section", "date", "subject"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.student.full_name} {self.date} {self.status}"
 
     def clean(self) -> None:
+        self.subject = (self.subject or "").strip()
         if self.student_id and self.section_id and self.student.section_id != self.section_id:
             raise ValidationError({"section": "Attendance section must match the student's assigned section."})
         if self.device_id and self.student_id and self.device.campus_id != self.student.campus_id:
@@ -426,8 +510,304 @@ class StaffAttendanceRecord(AuditModel):
     def clean(self) -> None:
         if self.device_id and self.campus_id and self.device.campus_id != self.campus_id:
             raise ValidationError({"device": "Attendance device must belong to the selected campus."})
+        if self.staff_user_id and getattr(self.staff_user, "role", None) in {"student", "parent"}:
+            raise ValidationError({"staff_user": "Staff attendance cannot be recorded for student or parent users."})
+
+
+class StaffProfile(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="staff_profiles")
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="staff_profile",
+    )
+    employee_code = models.CharField(max_length=40, unique=True)
+    designation = models.CharField(max_length=120)
+    department = models.CharField(max_length=120, blank=True)
+    employment_type = models.CharField(
+        max_length=20,
+        choices=StaffEmploymentType.choices,
+        default=StaffEmploymentType.FULL_TIME,
+    )
+    joining_date = models.DateField()
+    qualification = models.CharField(max_length=180, blank=True)
+    emergency_contact = models.CharField(max_length=40, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=StaffProfileStatus.choices,
+        default=StaffProfileStatus.ACTIVE,
+    )
+
+    class Meta:
+        ordering = ["campus__name", "employee_code"]
+        indexes = [
+            models.Index(fields=["campus", "status"]),
+            models.Index(fields=["department"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.employee_code} - {self.user}"
+
+    def clean(self) -> None:
+        if self.user_id and getattr(self.user, "role", None) in {"student", "parent"}:
+            raise ValidationError({"user": "Staff profile users must be administrators or teachers."})
+
+
+class TimetableSlot(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="timetable_slots")
+    section = models.ForeignKey(ClassSection, on_delete=models.CASCADE, related_name="timetable_slots")
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="timetable_slots",
+    )
+    subject = models.CharField(max_length=80)
+    day_of_week = models.PositiveSmallIntegerField(choices=Weekday.choices)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    room = models.CharField(max_length=80, blank=True)
+    effective_from = models.DateField(default=timezone.localdate)
+    effective_to = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["day_of_week", "start_time", "section__grade_name", "section__section_name"]
+        unique_together = ("section", "day_of_week", "start_time")
+        indexes = [
+            models.Index(fields=["campus", "day_of_week"]),
+            models.Index(fields=["teacher", "day_of_week"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.section} {self.get_day_of_week_display()} {self.start_time} {self.subject}"
+
+    def clean(self) -> None:
+        self.subject = (self.subject or "").strip()
+        if self.section_id and self.campus_id and self.section.campus_id != self.campus_id:
+            raise ValidationError({"section": "Section must belong to the selected campus."})
+        if self.teacher_id and getattr(self.teacher, "role", None) != "teacher":
+            raise ValidationError({"teacher": "Timetable teacher must be a teacher user."})
+        if self.end_time and self.start_time and self.end_time <= self.start_time:
+            raise ValidationError({"end_time": "End time must be after start time."})
+        if self.effective_to and self.effective_from and self.effective_to < self.effective_from:
+            raise ValidationError({"effective_to": "End date must be on or after the effective from date."})
+        if not self.subject:
+            raise ValidationError({"subject": "Subject is required."})
+
+
+class LibraryBook(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="library_books")
+    accession_number = models.CharField(max_length=60, unique=True)
+    title = models.CharField(max_length=180)
+    author = models.CharField(max_length=160, blank=True)
+    isbn = models.CharField(max_length=40, blank=True)
+    category = models.CharField(max_length=80, blank=True)
+    total_copies = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    available_copies = models.PositiveIntegerField(default=1)
+    shelf_location = models.CharField(max_length=80, blank=True)
+    status = models.CharField(max_length=20, choices=LibraryBookStatus.choices, default=LibraryBookStatus.ACTIVE)
+
+    class Meta:
+        ordering = ["title", "accession_number"]
+        indexes = [
+            models.Index(fields=["campus", "status"]),
+            models.Index(fields=["category"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.accession_number})"
+
+    def clean(self) -> None:
+        if self.available_copies > self.total_copies:
+            raise ValidationError({"available_copies": "Available copies cannot exceed total copies."})
+
+
+class LibraryLoan(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="library_loans")
+    book = models.ForeignKey(LibraryBook, on_delete=models.CASCADE, related_name="loans")
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="library_loans",
+    )
+    staff_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="library_loans",
+    )
+    issued_on = models.DateField(default=timezone.localdate)
+    due_on = models.DateField()
+    returned_on = models.DateField(null=True, blank=True)
+    fine_amount = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    status = models.CharField(max_length=20, choices=LibraryLoanStatus.choices, default=LibraryLoanStatus.ISSUED)
+
+    class Meta:
+        ordering = ["status", "due_on", "-issued_on"]
+        indexes = [
+            models.Index(fields=["campus", "status"]),
+            models.Index(fields=["student", "status"]),
+            models.Index(fields=["staff_user", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        borrower = self.student.full_name if self.student_id else self.staff_user
+        return f"{self.book.title} -> {borrower}"
+
+    def clean(self) -> None:
+        if bool(self.student_id) == bool(self.staff_user_id):
+            raise ValidationError({"student": "Select exactly one borrower: student or staff user."})
+        if self.book_id and self.campus_id and self.book.campus_id != self.campus_id:
+            raise ValidationError({"book": "Book must belong to the selected campus."})
+        if self.student_id and self.campus_id and self.student.campus_id != self.campus_id:
+            raise ValidationError({"student": "Student must belong to the selected campus."})
         if self.staff_user_id and getattr(self.staff_user, "role", None) == "student":
-            raise ValidationError({"staff_user": "Staff attendance cannot be recorded for student users."})
+            raise ValidationError({"staff_user": "Use the student borrower field for student users."})
+        if self.due_on and self.issued_on and self.due_on < self.issued_on:
+            raise ValidationError({"due_on": "Due date must be on or after issue date."})
+        if self.returned_on and self.issued_on and self.returned_on < self.issued_on:
+            raise ValidationError({"returned_on": "Return date must be on or after issue date."})
+        if self.fine_amount < Decimal("0"):
+            raise ValidationError({"fine_amount": "Fine amount cannot be negative."})
+
+
+class TransportRoute(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="transport_routes")
+    name = models.CharField(max_length=120)
+    route_code = models.CharField(max_length=40, unique=True)
+    start_point = models.CharField(max_length=120)
+    end_point = models.CharField(max_length=120)
+    stops = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["campus__name", "route_code"]
+        indexes = [
+            models.Index(fields=["campus", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.route_code} - {self.name}"
+
+
+class TransportVehicle(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="transport_vehicles")
+    route = models.ForeignKey(
+        TransportRoute,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="vehicles",
+    )
+    vehicle_number = models.CharField(max_length=40, unique=True)
+    driver_name = models.CharField(max_length=120)
+    driver_phone = models.CharField(max_length=40, blank=True)
+    capacity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    gps_device_id = models.CharField(max_length=80, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["campus__name", "vehicle_number"]
+        indexes = [
+            models.Index(fields=["campus", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.vehicle_number
+
+    def clean(self) -> None:
+        if self.route_id and self.campus_id and self.route.campus_id != self.campus_id:
+            raise ValidationError({"route": "Route must belong to the selected campus."})
+
+
+class StudentTransportAssignment(AuditModel):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="transport_assignments")
+    route = models.ForeignKey(TransportRoute, on_delete=models.CASCADE, related_name="student_assignments")
+    vehicle = models.ForeignKey(
+        TransportVehicle,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="student_assignments",
+    )
+    pickup_stop = models.CharField(max_length=120)
+    drop_stop = models.CharField(max_length=120)
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    fee_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["student__first_name", "start_date"]
+        unique_together = ("student", "route", "start_date")
+        indexes = [
+            models.Index(fields=["route", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student.full_name} - {self.route.route_code}"
+
+    def clean(self) -> None:
+        if self.student_id and self.route_id and self.student.campus_id != self.route.campus_id:
+            raise ValidationError({"route": "Route must belong to the student's campus."})
+        if self.vehicle_id and self.route_id and self.vehicle.campus_id != self.route.campus_id:
+            raise ValidationError({"vehicle": "Vehicle must belong to the route campus."})
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            raise ValidationError({"end_date": "End date must be on or after start date."})
+        if self.fee_amount < Decimal("0"):
+            raise ValidationError({"fee_amount": "Transport fee cannot be negative."})
+
+
+class HostelRoom(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="hostel_rooms")
+    hostel_name = models.CharField(max_length=120)
+    room_number = models.CharField(max_length=40)
+    floor = models.CharField(max_length=40, blank=True)
+    capacity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["campus__name", "hostel_name", "room_number"]
+        unique_together = ("campus", "hostel_name", "room_number")
+        indexes = [
+            models.Index(fields=["campus", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.hostel_name} {self.room_number}"
+
+
+class HostelAllocation(AuditModel):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="hostel_allocations")
+    room = models.ForeignKey(HostelRoom, on_delete=models.CASCADE, related_name="allocations")
+    bed_number = models.CharField(max_length=40)
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    fee_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["student__first_name", "start_date"]
+        unique_together = ("room", "bed_number", "start_date")
+        indexes = [
+            models.Index(fields=["room", "is_active"]),
+            models.Index(fields=["student", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student.full_name} - {self.room} Bed {self.bed_number}"
+
+    def clean(self) -> None:
+        if self.student_id and self.room_id and self.student.campus_id != self.room.campus_id:
+            raise ValidationError({"room": "Hostel room must belong to the student's campus."})
+        if self.end_date and self.start_date and self.end_date < self.start_date:
+            raise ValidationError({"end_date": "End date must be on or after start date."})
+        if self.fee_amount < Decimal("0"):
+            raise ValidationError({"fee_amount": "Hostel fee cannot be negative."})
 
 
 class AssignedWork(AuditModel):

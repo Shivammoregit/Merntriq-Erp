@@ -33,7 +33,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Badge, statusBadge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
 type AcademicView = "work" | "resources" | "results" | "admit";
 
@@ -88,7 +88,6 @@ function FormFooter({ busy, label, onCancel }: { busy: boolean; label: string; o
         Cancel
       </button>
       <button type="submit" disabled={busy} className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-600 to-blue-700 px-5 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 disabled:opacity-60">
-        {busy && <Spinner size={14} />}
         {busy ? "Saving..." : label}
       </button>
     </div>
@@ -458,12 +457,7 @@ export function AcademicManagementPanel() {
   }
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-muted">Loading academic workspace...</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Academic workspace" detail="Preparing work, resources, results, and admit cards." />;
   }
 
   const title = user?.role === "teacher" ? "Class Academics" : "Academic Management";

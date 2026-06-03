@@ -24,15 +24,25 @@ from apps.core.models import (
     CampusMembership,
     ClassSection,
     FeeAssignment,
+    HostelAllocation,
+    HostelRoom,
+    LibraryBook,
+    LibraryLoan,
     LearningResource,
     Payment,
     PaymentMethod,
     ResultRecord,
     StaffAttendanceRecord,
+    StaffProfile,
     Student,
     StudentGuardian,
+    StudentTransportAssignment,
     SupportTicket,
     SupportTicketStatus,
+    TeacherSubjectAllocation,
+    TimetableSlot,
+    TransportRoute,
+    TransportVehicle,
 )
 
 
@@ -45,8 +55,8 @@ BASE_DEMO_ACCOUNT_ORDER = (
     "finance_admin",
     "teacher",
     "branch_teacher",
-    "parent",
     "student",
+    "parent",
 )
 BASE_DEMO_ACCOUNT_NOTES = {
     "super_admin": "Full access to all campuses and support issues",
@@ -56,8 +66,8 @@ BASE_DEMO_ACCOUNT_NOTES = {
     "finance_admin": "Fees and payment workflows",
     "teacher": "Main Campus assigned class access",
     "branch_teacher": "North Campus assigned class access",
-    "parent": "Read-only family portal for linked learners",
     "student": "Own learner profile only",
+    "parent": "Linked student family portal",
 }
 ADDITIONAL_DEMO_ACCOUNTS = (
     {
@@ -170,7 +180,7 @@ ADDITIONAL_DEMO_ACCOUNTS = (
         "role": UserRole.ADMIN,
         "campus": "main",
         "membership_role": CampusMemberRole.ACADEMIC_ADMIN,
-        "note": "SMS alerts, email notices, announcements, and parent messaging",
+        "note": "SMS alerts, email notices, announcements, and student or parent messaging",
     },
     {
         "key": "teacher_english",
@@ -392,96 +402,6 @@ ADDITIONAL_DEMO_ACCOUNTS = (
         "campus": "north",
         "note": "Student access for attendance, documents, and admit card view",
     },
-    {
-        "key": "parent_aarav",
-        "username": "parent.aarav",
-        "email": "parent.aarav@mentriq360.local",
-        "first_name": "Nitin",
-        "last_name": "Mehta",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Parent view for learner attendance, fees, results, and notices",
-    },
-    {
-        "key": "parent_diyaa",
-        "username": "parent.diyaa",
-        "email": "parent.diyaa@mentriq360.local",
-        "first_name": "Rhea",
-        "last_name": "Shah",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Guardian view for progress tracking and school communication",
-    },
-    {
-        "key": "parent_kabir",
-        "username": "parent.kabir",
-        "email": "parent.kabir@mentriq360.local",
-        "first_name": "Vikram",
-        "last_name": "Sethi",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Guardian view for fee receipts, attendance, and report cards",
-    },
-    {
-        "key": "parent_isha",
-        "username": "parent.isha",
-        "email": "parent.isha@mentriq360.local",
-        "first_name": "Deepa",
-        "last_name": "Nair",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Parent access for assignments, school notices, and results",
-    },
-    {
-        "key": "parent_mira",
-        "username": "parent.mira",
-        "email": "parent.mira@mentriq360.local",
-        "first_name": "Pranav",
-        "last_name": "Das",
-        "role": UserRole.PARENT,
-        "campus": "north",
-        "note": "North campus parent access for linked learner monitoring",
-    },
-    {
-        "key": "parent_arjun",
-        "username": "parent.arjun",
-        "email": "parent.arjun@mentriq360.local",
-        "first_name": "Maya",
-        "last_name": "Pillai",
-        "role": UserRole.PARENT,
-        "campus": "north",
-        "note": "Guardian access for attendance, homework, and payment history",
-    },
-    {
-        "key": "parent_tara",
-        "username": "parent.tara",
-        "email": "parent.tara@mentriq360.local",
-        "first_name": "Kunal",
-        "last_name": "Bajaj",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Parent dashboard for notices, performance, and fee visibility",
-    },
-    {
-        "key": "parent_ved",
-        "username": "parent.ved",
-        "email": "parent.ved@mentriq360.local",
-        "first_name": "Anita",
-        "last_name": "Raman",
-        "role": UserRole.PARENT,
-        "campus": "north",
-        "note": "Parent portal for school notifications and student progress",
-    },
-    {
-        "key": "parent_zara",
-        "username": "parent.zara",
-        "email": "parent.zara@mentriq360.local",
-        "first_name": "Farah",
-        "last_name": "Khan",
-        "role": UserRole.PARENT,
-        "campus": "main",
-        "note": "Family portal for linked student communication and reports",
-    },
 )
 DEMO_ACCOUNT_ORDER = BASE_DEMO_ACCOUNT_ORDER + tuple(account["key"] for account in ADDITIONAL_DEMO_ACCOUNTS)
 DEMO_ACCOUNT_NOTES = {
@@ -503,6 +423,7 @@ class Command(BaseCommand):
             self.create_attendance(students, sections, devices, users)
             self.create_fees(students, users)
             self.create_academic_records(students, sections, users)
+            self.create_operations(students, sections, users, campuses)
             self.create_audit_events(users, campuses)
             self.create_notifications_and_support(users, campuses)
 
@@ -620,19 +541,19 @@ class Command(BaseCommand):
                 "last_name": "Narang",
                 "role": UserRole.TEACHER,
             },
-            "parent": {
-                "username": "parent.rohan",
-                "email": "parent@mentriq360.local",
-                "first_name": "Rohan",
-                "last_name": "Kapoor",
-                "role": UserRole.PARENT,
-            },
             "student": {
                 "username": "student.anaya",
                 "email": "student@mentriq360.local",
                 "first_name": "Anaya",
                 "last_name": "Kapoor",
                 "role": UserRole.STUDENT,
+            },
+            "parent": {
+                "username": "parent.rohan",
+                "email": "parent.rohan@mentriq360.local",
+                "first_name": "Rohan",
+                "last_name": "Kapoor",
+                "role": UserRole.PARENT,
             },
         }
         for account in ADDITIONAL_DEMO_ACCOUNTS:
@@ -658,15 +579,15 @@ class Command(BaseCommand):
 
     def create_academic_structure(self, users):
         campus_specs = {
-            "main": ("M360-MAIN", "Mentriq360 Main Campus", "Knowledge Park, Bengaluru"),
-            "north": ("M360-NORTH", "Mentriq360 North Campus", "North Avenue, Bengaluru"),
+            "main": ("M360-MAIN", "Mentriq360 Main Campus", "Knowledge Park, Bengaluru", "Mentriq360 Main Campus logo"),
+            "north": ("M360-NORTH", "Mentriq360 North Campus", "North Avenue, Bengaluru", "Mentriq360 North Campus logo"),
         }
         campuses = {}
         sessions = {}
-        for key, (code, name, address) in campus_specs.items():
+        for key, (code, name, address, logo_alt_text) in campus_specs.items():
             campus, _ = Campus.objects.update_or_create(
                 code=code,
-                defaults={"name": name, "address": address},
+                defaults={"name": name, "address": address, "logo_alt_text": logo_alt_text},
             )
             session, _ = AcademicSession.objects.update_or_create(
                 campus=campus,
@@ -695,6 +616,29 @@ class Command(BaseCommand):
                 defaults={"class_teacher": teacher},
             )
             sections[key] = section
+
+        allocation_specs = [
+            (sections["main_5a"], users["teacher"], "Mathematics", 6),
+            (sections["main_5a"], users["teacher_science"], "Science", 5),
+            (sections["main_5a"], users["teacher_english"], "English", 5),
+            (sections["main_6b"], users["teacher_maths"], "Mathematics", 6),
+            (sections["main_6b"], users["teacher_english"], "English", 5),
+            (sections["main_6b"], users["teacher_hindi"], "Hindi", 4),
+            (sections["north_6b"], users["branch_teacher"], "Social Science", 5),
+            (sections["north_6b"], users["teacher_computer"], "Computer", 3),
+            (sections["north_6b"], users["teacher_music"], "Music", 2),
+        ]
+        for section, teacher, subject, weekly_periods in allocation_specs:
+            TeacherSubjectAllocation.objects.update_or_create(
+                campus=section.campus,
+                section=section,
+                teacher=teacher,
+                subject=subject,
+                defaults={
+                    "weekly_periods": weekly_periods,
+                    "is_active": True,
+                },
+            )
         return campuses, sessions, sections
 
     def create_campus_controls(self, campuses, users):
@@ -703,16 +647,16 @@ class Command(BaseCommand):
             (campuses["main"], users["academic_admin"], CampusMemberRole.ACADEMIC_ADMIN, True, False),
             (campuses["main"], users["finance_admin"], CampusMemberRole.FINANCE_ADMIN, True, False),
             (campuses["main"], users["teacher"], CampusMemberRole.TEACHER, False, False),
-            (campuses["main"], users["parent"], CampusMemberRole.SUPPORT, False, False),
             (campuses["main"], users["student"], CampusMemberRole.SUPPORT, False, False),
+            (campuses["main"], users["parent"], CampusMemberRole.SUPPORT, False, False),
             (campuses["north"], users["branch_admin"], CampusMemberRole.IT_ADMIN, True, True),
             (campuses["north"], users["branch_teacher"], CampusMemberRole.TEACHER, False, False),
         ]
         default_membership_role = {
             UserRole.ADMIN: CampusMemberRole.IT_ADMIN,
             UserRole.TEACHER: CampusMemberRole.TEACHER,
-            UserRole.PARENT: CampusMemberRole.SUPPORT,
             UserRole.STUDENT: CampusMemberRole.SUPPORT,
+            UserRole.PARENT: CampusMemberRole.SUPPORT,
         }
         for account in ADDITIONAL_DEMO_ACCOUNTS:
             user = users[account["key"]]
@@ -893,12 +837,12 @@ class Command(BaseCommand):
                 },
             )
             students.append(student)
-        for student in students[:2]:
-            StudentGuardian.objects.update_or_create(
-                student=student,
-                guardian=parent_user,
-                defaults={"relationship": "Parent"},
-            )
+            if student.admission_number == "ADM-2026-001":
+                StudentGuardian.objects.update_or_create(
+                    student=student,
+                    guardian=parent_user,
+                    defaults={"relationship": "Father"},
+                )
         return students
 
     def create_attendance(self, students, sections, devices, users):
@@ -917,6 +861,7 @@ class Command(BaseCommand):
                 AttendanceRecord.objects.update_or_create(
                     student=student,
                     date=attendance_date,
+                    subject="",
                     defaults={
                         "section": student.section,
                         "status": status_value,
@@ -1033,6 +978,215 @@ class Command(BaseCommand):
                 },
             )
 
+    def create_operations(self, students, sections, users, campuses):
+        staff_specs = [
+            (users["teacher"], campuses["main"], "EMP-M360-001", "Class Teacher", "Academics", "M.Ed", "9876500101"),
+            (users["teacher_english"], campuses["main"], "EMP-M360-002", "English Faculty", "Academics", "M.A. English", "9876500102"),
+            (users["teacher_science"], campuses["main"], "EMP-M360-003", "Science Faculty", "Academics", "M.Sc Science", "9876500103"),
+            (users["branch_teacher"], campuses["north"], "EMP-NORTH-001", "Class Teacher", "Academics", "B.Ed", "9876500201"),
+            (users["library_admin"], campuses["main"], "EMP-M360-LIB", "Librarian", "Library", "MLIS", "9876500301"),
+            (users["transport_admin"], campuses["north"], "EMP-NORTH-TRN", "Transport Coordinator", "Transport", "Operations", "9876500401"),
+            (users["hostel_admin"], campuses["north"], "EMP-NORTH-HST", "Hostel Warden", "Hostel", "Administration", "9876500501"),
+        ]
+        for staff_user, campus, employee_code, designation, department, qualification, emergency_contact in staff_specs:
+            StaffProfile.objects.update_or_create(
+                user=staff_user,
+                defaults={
+                    "campus": campus,
+                    "employee_code": employee_code,
+                    "designation": designation,
+                    "department": department,
+                    "employment_type": "full_time",
+                    "joining_date": date(2024, 4, 1),
+                    "qualification": qualification,
+                    "emergency_contact": emergency_contact,
+                    "status": "active",
+                },
+            )
+
+        slot_specs = [
+            (sections["main_5a"], users["teacher"], "Mathematics", 1, time(9, 0), time(9, 40), "A-101"),
+            (sections["main_5a"], users["teacher_science"], "Science", 1, time(9, 45), time(10, 25), "Lab-1"),
+            (sections["main_5a"], users["teacher_english"], "English", 2, time(9, 0), time(9, 40), "A-101"),
+            (sections["main_6b"], users["teacher_maths"], "Mathematics", 3, time(10, 30), time(11, 10), "B-204"),
+            (sections["north_6b"], users["branch_teacher"], "Social Science", 1, time(9, 0), time(9, 40), "N-201"),
+            (sections["north_6b"], users["teacher_computer"], "Computer", 2, time(11, 15), time(11, 55), "Computer Lab"),
+        ]
+        for section, teacher, subject, weekday, start_time, end_time, room in slot_specs:
+            TimetableSlot.objects.update_or_create(
+                section=section,
+                day_of_week=weekday,
+                start_time=start_time,
+                defaults={
+                    "campus": section.campus,
+                    "teacher": teacher,
+                    "subject": subject,
+                    "end_time": end_time,
+                    "room": room,
+                    "effective_from": date(2026, 4, 1),
+                    "effective_to": None,
+                },
+            )
+
+        book_specs = [
+            (campuses["main"], "LIB-M-001", "Mathematics Skill Builder", "R. Menon", "Academics", 6, "A1"),
+            (campuses["main"], "LIB-M-002", "Young Scientist Reader", "K. Rao", "Science", 4, "S2"),
+            (campuses["main"], "LIB-M-003", "English Grammar Practice", "A. Shah", "English", 5, "E4"),
+            (campuses["north"], "LIB-N-001", "Indian Geography Atlas", "School Press", "Social Science", 3, "N1"),
+            (campuses["north"], "LIB-N-002", "Computer Basics", "Digital Learning", "Computer", 4, "N2"),
+        ]
+        books = {}
+        for campus, accession_number, title, author, category, copies, shelf in book_specs:
+            book, _ = LibraryBook.objects.update_or_create(
+                accession_number=accession_number,
+                defaults={
+                    "campus": campus,
+                    "title": title,
+                    "author": author,
+                    "isbn": "",
+                    "category": category,
+                    "total_copies": copies,
+                    "available_copies": max(copies - 1, 0),
+                    "shelf_location": shelf,
+                    "status": "active",
+                },
+            )
+            books[accession_number] = book
+
+        LibraryLoan.objects.update_or_create(
+            campus=campuses["main"],
+            book=books["LIB-M-001"],
+            student=students[0],
+            staff_user=None,
+            defaults={
+                "issued_on": timezone.localdate() - timedelta(days=3),
+                "due_on": timezone.localdate() + timedelta(days=11),
+                "returned_on": None,
+                "fine_amount": Decimal("0.00"),
+                "status": "issued",
+            },
+        )
+        LibraryLoan.objects.update_or_create(
+            campus=campuses["north"],
+            book=books["LIB-N-001"],
+            student=None,
+            staff_user=users["branch_teacher"],
+            defaults={
+                "issued_on": timezone.localdate() - timedelta(days=8),
+                "due_on": timezone.localdate() + timedelta(days=6),
+                "returned_on": None,
+                "fine_amount": Decimal("0.00"),
+                "status": "issued",
+            },
+        )
+
+        route_specs = [
+            (campuses["main"], "Main East Route", "TR-MAIN-EAST", "Indiranagar", "Campus Gate", ["Indiranagar", "Domlur", "Old Airport Road"]),
+            (campuses["north"], "North Hebbal Route", "TR-NORTH-HEB", "Hebbal", "North Campus", ["Hebbal", "Manyata", "Yelahanka"]),
+        ]
+        routes = {}
+        for campus, name, route_code, start_point, end_point, stops in route_specs:
+            route, _ = TransportRoute.objects.update_or_create(
+                route_code=route_code,
+                defaults={
+                    "campus": campus,
+                    "name": name,
+                    "start_point": start_point,
+                    "end_point": end_point,
+                    "stops": stops,
+                    "is_active": True,
+                },
+            )
+            routes[route_code] = route
+
+        vehicle_specs = [
+            (campuses["main"], routes["TR-MAIN-EAST"], "KA-01-MQ-3601", "Ramesh Kumar", "9876500601", 36, "GPS-MAIN-01"),
+            (campuses["north"], routes["TR-NORTH-HEB"], "KA-02-MQ-3602", "Mahesh Gowda", "9876500602", 32, "GPS-NORTH-01"),
+        ]
+        vehicles = {}
+        for campus, route, vehicle_number, driver_name, driver_phone, capacity, gps_device_id in vehicle_specs:
+            vehicle, _ = TransportVehicle.objects.update_or_create(
+                vehicle_number=vehicle_number,
+                defaults={
+                    "campus": campus,
+                    "route": route,
+                    "driver_name": driver_name,
+                    "driver_phone": driver_phone,
+                    "capacity": capacity,
+                    "gps_device_id": gps_device_id,
+                    "is_active": True,
+                },
+            )
+            vehicles[vehicle_number] = vehicle
+
+        StudentTransportAssignment.objects.update_or_create(
+            student=students[0],
+            route=routes["TR-MAIN-EAST"],
+            start_date=date(2026, 4, 1),
+            defaults={
+                "vehicle": vehicles["KA-01-MQ-3601"],
+                "pickup_stop": "Indiranagar",
+                "drop_stop": "Campus Gate",
+                "end_date": None,
+                "fee_amount": Decimal("6000.00"),
+                "is_active": True,
+            },
+        )
+        StudentTransportAssignment.objects.update_or_create(
+            student=students[4],
+            route=routes["TR-NORTH-HEB"],
+            start_date=date(2026, 4, 1),
+            defaults={
+                "vehicle": vehicles["KA-02-MQ-3602"],
+                "pickup_stop": "Yelahanka",
+                "drop_stop": "North Campus",
+                "end_date": None,
+                "fee_amount": Decimal("6200.00"),
+                "is_active": True,
+            },
+        )
+
+        room_specs = [
+            (campuses["north"], "North Girls Hostel", "G-101", "1", 4),
+            (campuses["north"], "North Boys Hostel", "B-102", "1", 4),
+        ]
+        rooms = {}
+        for campus, hostel_name, room_number, floor, capacity in room_specs:
+            room, _ = HostelRoom.objects.update_or_create(
+                campus=campus,
+                hostel_name=hostel_name,
+                room_number=room_number,
+                defaults={
+                    "floor": floor,
+                    "capacity": capacity,
+                    "is_active": True,
+                },
+            )
+            rooms[room_number] = room
+
+        HostelAllocation.objects.update_or_create(
+            room=rooms["G-101"],
+            bed_number="G-101-A",
+            start_date=date(2026, 4, 1),
+            defaults={
+                "student": students[4],
+                "end_date": None,
+                "fee_amount": Decimal("18000.00"),
+                "is_active": True,
+            },
+        )
+        HostelAllocation.objects.update_or_create(
+            room=rooms["B-102"],
+            bed_number="B-102-A",
+            start_date=date(2026, 4, 1),
+            defaults={
+                "student": students[5],
+                "end_date": None,
+                "fee_amount": Decimal("18000.00"),
+                "is_active": True,
+            },
+        )
+
     def create_audit_events(self, users, campuses):
         events = [
             (users["admin"], AuditAction.CREATE, "Student", "ADM-2026-001", "Created linked demo student profile", campuses["main"]),
@@ -1112,7 +1266,7 @@ class Command(BaseCommand):
                 campuses["main"],
                 users["parent"],
                 "Fee receipt correction",
-                "Receipt spelling correction requested for the last online payment.",
+                "Receipt spelling correction requested by the linked parent for the last online payment.",
                 "fees",
                 "normal",
                 SupportTicketStatus.RESOLVED,

@@ -37,7 +37,7 @@ import {
 } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 import { useAuth } from "@/lib/auth-context";
 
 type AdminView = "students" | "campuses" | "sessions" | "sections" | "users";
@@ -120,7 +120,6 @@ function FormActions({
         Cancel
       </button>
       <button type="submit" disabled={busy} className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-600 to-blue-700 px-5 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 disabled:opacity-60">
-        {busy && <Spinner size={14} />}
         {busy ? "Saving..." : label}
       </button>
     </div>
@@ -292,10 +291,16 @@ function CampusForm({
   onCancel,
 }: {
   initial?: Campus;
-  onSave: (data: Omit<Campus, "id">) => Promise<void>;
+  onSave: (data: Pick<Campus, "name" | "code"> & Partial<Pick<Campus, "address" | "logo_url" | "logo_alt_text" | "database_alias" | "database_name">>) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState({ name: initial?.name ?? "", code: initial?.code ?? "", address: initial?.address ?? "" });
+  const [form, setForm] = useState({
+    name: initial?.name ?? "",
+    code: initial?.code ?? "",
+    address: initial?.address ?? "",
+    database_alias: initial?.database_alias ?? "",
+    database_name: initial?.database_name ?? "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -324,6 +329,12 @@ function CampusForm({
         </Field>
         <Field label="Address" wide>
           <input className={inputCls} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+        </Field>
+        <Field label="Database alias">
+          <input className={inputCls} value={form.database_alias} onChange={(e) => setForm((f) => ({ ...f, database_alias: e.target.value }))} placeholder="campus_m360_main" />
+        </Field>
+        <Field label="Database name">
+          <input className={inputCls} value={form.database_name} onChange={(e) => setForm((f) => ({ ...f, database_name: e.target.value }))} placeholder="mentriq360_main" />
         </Field>
       </div>
       <FormActions busy={busy} label="Save campus" onCancel={onCancel} />
@@ -544,6 +555,7 @@ function UserForm({
             <option value="admin">Admin</option>
             <option value="teacher">Teacher</option>
             <option value="student">Student</option>
+            <option value="parent">Parent</option>
           </select>
         </Field>
         <Field label="First name">
@@ -1015,7 +1027,7 @@ function BulkImportModal({
             disabled={busy || rows.length === 0}
             className="inline-flex items-center gap-2 rounded-2xl bg-ink px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? <Spinner size={14} /> : <Upload size={14} />}
+            <Upload size={14} />
             {busy ? "Importing..." : `Import ${rows.length} row(s)`}
           </button>
         </div>
@@ -1191,12 +1203,7 @@ export function AdminDashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-muted">Loading admin dashboard...</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Admin dashboard" detail="Preparing records and access controls." />;
   }
 
   return (

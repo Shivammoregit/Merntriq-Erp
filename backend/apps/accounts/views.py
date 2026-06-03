@@ -52,7 +52,7 @@ class CaptchaChallengeView(APIView):
         return Response(
             {
                 "challenge_id": challenge.challenge_id,
-                "image": challenge.image,
+                "code": challenge.code,
                 "expires_in": challenge.expires_in,
                 "expires_at": challenge.expires_at,
             }

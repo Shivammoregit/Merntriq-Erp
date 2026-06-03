@@ -14,7 +14,7 @@ import {
 
 import { ApiError, auditApi, reportApi, type AuditEvent, type DashboardSummary } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
 function money(value: string) {
   return Number(value || 0).toLocaleString("en-IN", {
@@ -84,12 +84,7 @@ export function ReportsDashboard() {
   }, [summary]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-muted">Loading reports...</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Reports" detail="Preparing analytics, audit activity, and summaries." />;
   }
 
   if (error || !summary) {

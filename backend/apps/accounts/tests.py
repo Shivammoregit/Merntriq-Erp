@@ -16,13 +16,14 @@ class LoginCaptchaTests(APITestCase):
             is_staff=True,
         )
 
-    def test_captcha_challenge_is_public_and_contains_image(self):
+    def test_captcha_challenge_is_public_and_contains_numeric_code(self):
         response = self.client.get("/api/v1/auth/captcha/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("challenge_id", response.data)
         self.assertIn("expires_in", response.data)
-        self.assertTrue(response.data["image"].startswith("data:image/png;base64,"))
+        self.assertIn("code", response.data)
+        self.assertRegex(response.data["code"], r"^\d{5}$")
 
     def test_login_requires_valid_captcha(self):
         missing = self.client.post(
@@ -35,7 +36,7 @@ class LoginCaptchaTests(APITestCase):
             {
                 "username": "login.admin",
                 "password": "Passw0rd!123",
-                "captcha_id": make_captcha_token("A7K9P"),
+                "captcha_id": make_captcha_token("73941"),
                 "captcha_answer": "WRONG",
             },
             format="json",
@@ -50,8 +51,8 @@ class LoginCaptchaTests(APITestCase):
             {
                 "username": "login.admin",
                 "password": "Passw0rd!123",
-                "captcha_id": make_captcha_token("A7K9P"),
-                "captcha_answer": "a7 k9p",
+                "captcha_id": make_captcha_token("73941"),
+                "captcha_answer": "73941",
             },
             format="json",
         )

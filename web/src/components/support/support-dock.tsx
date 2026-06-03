@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { ApiError, supportTicketApi, type SupportTicket, type SupportTicketPriority } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { Spinner } from "@/components/ui/spinner";
 
 const SUPPORT_CATEGORIES = [
   { value: "general", label: "General" },
@@ -204,7 +203,6 @@ export function SupportDock() {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Issue queue</p>
                       <h3 className="mt-1 text-lg font-semibold text-ink">Latest open requests</h3>
                     </div>
-                    {loading && <Spinner size={18} className="text-accent" />}
                   </div>
                   <div className="mt-4 grid gap-3">
                     {tickets.length === 0 && !loading ? (
@@ -325,7 +323,7 @@ export function SupportDock() {
                       disabled={submitting || !subject.trim() || !message.trim()}
                       className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {submitting ? <Spinner size={16} /> : <Send size={16} />}
+                      <Send size={16} />
                       {submitting ? "Sending..." : "Send to super admin"}
                     </button>
                   </div>

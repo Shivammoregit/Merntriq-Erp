@@ -33,9 +33,36 @@ const ROLE_COLOUR: Record<string, string> = {
   super_admin: "border-emerald-200 bg-emerald-50 text-emerald-700",
   admin: "border-blue-200 bg-blue-50 text-blue-700",
   teacher: "border-slate-200 bg-slate-50 text-slate-700",
-  parent: "border-amber-200 bg-amber-50 text-amber-700",
   student: "border-slate-200 bg-slate-50 text-slate-700",
+  parent: "border-teal-200 bg-teal-50 text-teal-700",
 };
+
+const FAQ_ITEMS = [
+  {
+    question: "Can I use one email address for multiple admission forms?",
+    answer: "Yes. The student admission number remains the unique student identity. The same guardian email can be recorded on multiple student records.",
+  },
+  {
+    question: "Is registration required before submitting an online admission form?",
+    answer: "Yes. A login account keeps admission, document upload, approval, and class allocation traceable in the ERP audit flow.",
+  },
+  {
+    question: "Can I use one mobile number for multiple student forms?",
+    answer: "Yes. The same guardian mobile number can be reused for siblings while each student keeps a separate admission profile.",
+  },
+  {
+    question: "Where can I check attendance, fees, homework, and results?",
+    answer: "Students and parents can open the learner portal. Staff can use Attendance, Pay Online, LMS, and Examination modules according to their role.",
+  },
+  {
+    question: "How can I send a problem or message to support?",
+    answer: "Use the Support button at the bottom of the ERP. The request goes to the super admin queue with category, priority, campus, and message.",
+  },
+  {
+    question: "How do I correct student details after admission?",
+    answer: "An admin with Student Info permission can edit student details from the Student Info module and the change is stored through the backend API.",
+  },
+];
 
 interface NavItem {
   id: string;
@@ -58,8 +85,8 @@ function accessLabel(role?: string) {
   if (role === "super_admin") return "Full access";
   if (role === "admin") return "Admin access";
   if (role === "teacher") return "Teacher access";
-  if (role === "parent") return "Parent view";
   if (role === "student") return "Student view";
+  if (role === "parent") return "Family view";
   return "Limited access";
 }
 
@@ -93,14 +120,18 @@ export function Topbar({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
+  const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(0);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [openDomain, setOpenDomain] = useState<string | null>(null);
   const [readAnnouncementIds, setReadAnnouncementIds] = useState<Set<string>>(new Set());
   const [remoteAnnouncements, setRemoteAnnouncements] = useState<ApiAnnouncement[]>([]);
   const [supportIssues, setSupportIssues] = useState<SupportTicket[]>([]);
   const [notificationError, setNotificationError] = useState("");
 
-  const roleLabel = user?.role.replace("_", " ") ?? "";
-  const roleColour = ROLE_COLOUR[user?.role ?? ""] ?? "border-slate-200 bg-slate-50 text-slate-600";
+  const currentRole = user?.role;
+  const roleLabel = currentRole?.replace("_", " ") ?? "";
+  const roleColour = ROLE_COLOUR[currentRole ?? ""] ?? "border-slate-200 bg-slate-50 text-slate-600";
   const primaryScope = user?.campuses?.find((campus) => campus.is_primary) ?? user?.campuses?.[0];
   const campusLabel = user?.role === "super_admin"
     ? "All campuses"
@@ -119,6 +150,17 @@ export function Topbar({
     return groups;
   }, [navItems]);
   const activeDomain = groupedNav.find((group) => group.items.some((item) => item.id === activeTab));
+  const searchResults = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return navItems;
+    return navItems.filter((item) =>
+      [item.label, item.domainLabel, item.responsibility]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [navItems, searchTerm]);
 
   useEffect(() => {
     if (!user) return;
@@ -164,8 +206,8 @@ export function Topbar({
       })),
       {
         id: "campus-context",
-        title: user?.role === "super_admin" ? "Network-wide campus view" : "Campus workspace active",
-        message: user?.role === "super_admin"
+        title: currentRole === "super_admin" ? "Network-wide campus view" : "Campus workspace active",
+        message: currentRole === "super_admin"
           ? "You are viewing all campuses. Use campus filters before bulk actions or exports."
           : `${campusLabel} is your active ERP workspace for permitted modules.`,
         priority: "high",
@@ -182,7 +224,7 @@ export function Topbar({
       },
     ];
 
-    if (user?.role === "super_admin" || user?.role === "admin") {
+    if (currentRole === "super_admin" || currentRole === "admin") {
       items.push({
         id: "bulk-excel",
         title: "Bulk upload and Excel export",
@@ -193,7 +235,7 @@ export function Topbar({
       });
     }
 
-    if (user?.role === "teacher") {
+    if (currentRole === "teacher") {
       items.push({
         id: "attendance-window",
         title: "Attendance edit window",
@@ -204,11 +246,11 @@ export function Topbar({
       });
     }
 
-    if (user?.role === "student" || user?.role === "parent") {
+    if (currentRole === "student" || currentRole === "parent") {
       items.push({
         id: "learner-updates",
-        title: "Learner records available",
-        message: "Attendance, assigned work, results, resources, and admit cards are available in the learner portal.",
+        title: currentRole === "parent" ? "Family records available" : "Learner records available",
+        message: "Attendance, assigned work, results, resources, transport, hostel, and admit cards are available in the learner portal.",
         priority: "normal",
         time: "Today",
         icon: Info,
@@ -216,7 +258,7 @@ export function Topbar({
     }
 
     return items;
-  }, [campusLabel, remoteAnnouncements, supportIssues, user?.role]);
+  }, [campusLabel, currentRole, remoteAnnouncements, supportIssues]);
   const unreadAnnouncements = announcements.filter((item) => !readAnnouncementIds.has(item.id));
 
   function navigate(id: string) {
@@ -226,14 +268,34 @@ export function Topbar({
     setNotificationOpen(false);
     setLauncherOpen(false);
     setFaqOpen(false);
+    setSearchOpen(false);
+  }
+
+  function openSupportPanel() {
+    window.dispatchEvent(new CustomEvent("mentriq360-open-support"));
+    setSearchOpen(false);
+    setNotificationOpen(false);
+    setLauncherOpen(false);
+    setFaqOpen(false);
   }
 
   return (
     <header className="mastersoft-topbar sticky top-0 z-40">
-      <div className="flex min-h-[56px] w-full items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4">
+      <div className="flex min-h-[50px] w-full items-center justify-between gap-2 px-2 sm:gap-3 sm:px-3">
         <div className="flex min-w-0 shrink items-center gap-3 sm:gap-4">
-          <BrandLogo className="hidden sm:flex" />
-          <BrandLogo compact className="sm:hidden" />
+          <BrandLogo
+            className="hidden sm:flex"
+            logoUrl={primaryScope?.logo_url}
+            label={primaryScope?.name ?? "Mentriq360"}
+            subtitle={primaryScope?.code ?? "Campus ERP"}
+          />
+          <BrandLogo
+            compact
+            className="sm:hidden"
+            logoUrl={primaryScope?.logo_url}
+            label={primaryScope?.name ?? "Mentriq360"}
+            subtitle={primaryScope?.code ?? "Campus ERP"}
+          />
         </div>
 
         <nav className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-visible px-2 md:flex" aria-label="Main navigation">
@@ -309,7 +371,7 @@ export function Topbar({
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <div className="hidden min-w-0 items-center gap-2 border-l border-line/80 px-3 py-1 text-sm xl:flex">
+          <div className="hidden min-w-0 items-center gap-2 border-l border-line/80 px-3 py-1 text-sm 2xl:flex">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-ink shadow-sm">
               <Building2 size={15} />
             </span>
@@ -323,10 +385,74 @@ export function Topbar({
             <button
               type="button"
               aria-label="Search"
+              aria-expanded={searchOpen}
+              onClick={() => {
+                setSearchOpen((open) => !open);
+                setNotificationOpen(false);
+                setUserMenuOpen(false);
+                setOpenDomain(null);
+                setLauncherOpen(false);
+                setFaqOpen(false);
+              }}
               className="flex h-9 w-9 items-center justify-center rounded-md border border-line/80 bg-white text-muted shadow-sm transition hover:bg-slate-50 hover:text-ink"
             >
               <Search size={17} />
             </button>
+            {searchOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(30rem,calc(100vw-1rem))] rounded-lg border border-line/70 bg-white p-3 shadow-xl">
+                <label htmlFor="erp-global-search" className="relative block">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                  <input
+                    id="erp-global-search"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && searchResults[0]) navigate(searchResults[0].id);
+                    }}
+                    autoFocus
+                    placeholder="Search module, workflow, role, or responsibility"
+                    className="w-full rounded-md border border-line/80 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent"
+                  />
+                </label>
+
+                <div className="mt-3 grid max-h-72 gap-1 overflow-y-auto">
+                  {searchResults.map(({ id, label, domainLabel, responsibility, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => navigate(id)}
+                      className="flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left hover:bg-slate-50"
+                    >
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-strong">
+                        <Icon size={15} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-ink">{label}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-muted">{domainLabel ?? "Workspace"} - {responsibility ?? "Open workflow"}</span>
+                      </span>
+                      {activeTab === id && <Check size={15} className="mt-1 text-emerald-600" />}
+                    </button>
+                  ))}
+                  {searchResults.length === 0 && (
+                    <div className="rounded-md border border-line/70 bg-slate-50 px-3 py-5 text-center text-sm text-muted">
+                      No matching workflow found.
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 grid gap-2 border-t border-line/60 pt-3 sm:grid-cols-3">
+                  <button type="button" onClick={openSupportPanel} className="rounded-md border border-line/70 bg-white px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50">
+                    Support
+                  </button>
+                  <button type="button" onClick={() => { setNotificationOpen(true); setSearchOpen(false); }} className="rounded-md border border-line/70 bg-white px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50">
+                    Updates
+                  </button>
+                  <button type="button" onClick={() => { setFaqOpen(true); setSearchOpen(false); }} className="rounded-md border border-line/70 bg-white px-3 py-2 text-xs font-semibold text-ink hover:bg-slate-50">
+                    FAQs
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="relative hidden sm:block">
@@ -358,23 +484,22 @@ export function Topbar({
                   </button>
                 </div>
                 <div className="max-h-[28rem] overflow-y-auto pr-1">
-                  {[
-                    "Can I use one email address for multiple admission forms?",
-                    "Is registration required before submitting an online admission form?",
-                    "Can I use one mobile number for multiple student forms?",
-                    "Where can I check attendance, fees, homework, and results?",
-                    "How can I send a problem or message to support?",
-                    "How do I correct student details after admission?",
-                  ].map((question, index) => (
+                  {FAQ_ITEMS.map((item, index) => {
+                    const isOpen = activeFaqIndex === index;
+                    return (
                     <button
-                      key={question}
+                      key={item.question}
                       type="button"
-                      className="flex w-full items-center justify-between gap-4 border-b border-line/70 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-blue-700 hover:bg-white"
+                      onClick={() => setActiveFaqIndex((current) => current === index ? null : index)}
+                      className="block w-full border-b border-line/70 bg-slate-50 px-4 py-3 text-left hover:bg-white"
                     >
-                      <span>{index + 1}. {question}</span>
-                      <Plus size={18} className="shrink-0" />
+                      <span className="flex items-center justify-between gap-4 text-sm font-medium text-blue-700">
+                        <span>{index + 1}. {item.question}</span>
+                        <Plus size={18} className={`shrink-0 transition ${isOpen ? "rotate-45" : ""}`} />
+                      </span>
+                      {isOpen && <span className="mt-2 block text-sm leading-6 text-muted">{item.answer}</span>}
                     </button>
-                  ))}
+                  );})}
                 </div>
               </div>
             )}

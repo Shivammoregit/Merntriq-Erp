@@ -10,6 +10,8 @@ Base URL: `/api/v1/`
 - `GET/POST /auth/users/` - admin user management
 - `GET/PATCH/DELETE /auth/users/{id}/` - admin user detail
 
+For campus-isolated databases, send `X-Campus-Code: {campus_code}` with login and subsequent API requests. The code must be configured in `CAMPUS_DATABASE_URLS` or the campus catalog `database_alias`.
+
 ## Academic Setup
 
 - `GET/POST /campuses/`
@@ -19,12 +21,14 @@ Base URL: `/api/v1/`
 - `GET/POST /sections/`
 - `GET/PATCH/DELETE /sections/{id}/`
 
-## Students and Parents
+## Students and Guardians
 
 - `GET/POST /students/`
 - `GET/PATCH/DELETE /students/{id}/`
 - `GET/POST /student-guardians/`
 - `GET/PATCH/DELETE /student-guardians/{id}/`
+
+Parents use the same authenticated API and are scoped through `StudentGuardian` links to their linked student records.
 
 Useful filters:
 
@@ -73,13 +77,36 @@ Useful filters:
 - `/payments/?paid_on=2026-05-14`
 - `/payments/?payment_method=online`
 
+## Operations
+
+- `GET/POST /staff-profiles/`
+- `GET/PATCH/DELETE /staff-profiles/{id}/`
+- `GET/POST /timetable-slots/`
+- `GET/PATCH/DELETE /timetable-slots/{id}/`
+- `GET/POST /library-books/`
+- `GET/PATCH/DELETE /library-books/{id}/`
+- `GET/POST /library-loans/`
+- `GET/PATCH/DELETE /library-loans/{id}/`
+- `GET/POST /transport-routes/`
+- `GET/PATCH/DELETE /transport-routes/{id}/`
+- `GET/POST /transport-vehicles/`
+- `GET/PATCH/DELETE /transport-vehicles/{id}/`
+- `GET/POST /student-transport-assignments/`
+- `GET/PATCH/DELETE /student-transport-assignments/{id}/`
+- `GET/POST /hostel-rooms/`
+- `GET/PATCH/DELETE /hostel-rooms/{id}/`
+- `GET/POST /hostel-allocations/`
+- `GET/PATCH/DELETE /hostel-allocations/{id}/`
+
+Admins manage operational records. Teachers, students, and parents receive read-only scoped views where the record is connected to their class or linked student.
+
 ## Reports and Audit
 
 - `GET /reports/summary/`
 - `GET /audit-events/`
 - `GET /audit-events/{id}/`
 
-Audit events are admin-only. Parent users receive `403` for audit endpoints.
+Audit events are admin-only. Parent users receive `403` for audit endpoints and read only records linked through guardian relationships.
 
 ## Notifications and Support
 

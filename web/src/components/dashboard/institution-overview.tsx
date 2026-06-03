@@ -38,9 +38,9 @@ import {
   type UserRole,
 } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
-type OverviewTab = "dashboard" | "records" | "attendance" | "academics" | "finance" | "reports";
+type OverviewTab = "dashboard" | "records" | "attendance" | "operations" | "academics" | "finance" | "reports";
 type AllowedTab = OverviewTab | "modules" | "campus" | "fees" | "student";
 
 function asArray<T>(value: T[] | { results?: T[] }): T[] {
@@ -167,12 +167,7 @@ export function InstitutionOverview({
   }, [role]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-sm text-muted">Loading institution overview...</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Institution overview" detail="Preparing campus, attendance, finance, and academic totals." />;
   }
 
   if (error || !summary) {
@@ -228,6 +223,12 @@ export function InstitutionOverview({
       label: "Attendance Operations",
       description: "Daily section tracking with fast status visibility.",
       icon: ClipboardCheck,
+    },
+    {
+      id: "operations" as const,
+      label: "School Operations",
+      description: "Staff profiles, timetables, library, transport, and hostel services.",
+      icon: BriefcaseBusiness,
     },
     {
       id: "academics" as const,

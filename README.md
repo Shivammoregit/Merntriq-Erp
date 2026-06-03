@@ -1,6 +1,6 @@
 # Mentriq360 Campus ERP
 
-Mentriq360 is a role-based campus ERP built from the supplied ER/user-flow diagram. It covers authentication, admin setup, student records, teacher attendance, fee assignment, payment entry, reporting, audit logs, and student visibility.
+Mentriq360 is a role-based campus ERP built from the supplied ER/user-flow diagram. It covers authentication, admin setup, student records, teacher attendance, fee assignment, payment entry, reporting, audit logs, student visibility, and optional campus-isolated databases.
 
 ## Stack
 
@@ -21,7 +21,8 @@ Mentriq360 is a role-based campus ERP built from the supplied ER/user-flow diagr
 - Fees and payments: fee assignment, payment capture, automatic paid/partial/pending/overdue status refresh
 - Reports: dashboard summary, attendance by section, fee status, recent payments
 - Notifications and support: admin announcements, role-visible alerts, and user support tickets for super admins
-- Campus360 modules: a role-aware 20-module suite view covering admissions, SIS, staff, fees, exams, certificates, homework, timetable, library, transport, hostel, inventory, communication, online learning, analytics, director dashboard, and security
+- Campus360 modules: a role-aware suite view covering admissions, SIS, staff, fees, exams, certificates, homework, timetable, library, transport, hostel, inventory, communication, online learning, analytics, director dashboard, and security
+- Multi-tenant database routing: optional `X-Campus-Code` tenant context routes each configured campus to its own database alias
 - Security audit: login and write-action audit events
 - Production controls: installable web app manifest, session idle expiry, request timeouts, global error handling, Redis-backed throttling support, and scoped hardware attendance throttles
 
@@ -68,8 +69,24 @@ After `seed_demo`, all demo users use password `Mentriq@123`. The same demo-only
 - `finance.admin` - fees and payment workflows
 - `teacher.meera` - assigned class access
 - `teacher.dev` - North Campus assigned class access
-- `parent.rohan` - read-only family portal for linked learners
 - `student.anaya` - own profile only
+
+## Campus Databases
+
+Set `CAMPUS_DATABASE_URLS` to route a campus code to a separate database:
+
+```dotenv
+CAMPUS_DATABASE_URLS=M360-MAIN=postgres://user:pass@host:5432/mentriq360_main;M360-NORTH=postgres://user:pass@host:5432/mentriq360_north
+```
+
+Run tenant migrations with:
+
+```powershell
+Set-Location backend
+..\.backend-venv\Scripts\python.exe manage.py migrate_campus_databases
+```
+
+The web login has an optional Campus code field. Leave it blank for the default database, or enter a configured campus code to use that campus database.
 
 ## Verification
 

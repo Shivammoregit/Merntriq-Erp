@@ -10,7 +10,6 @@ import {
   type AttendanceRS485Function,
   type Campus,
 } from "@/lib/api";
-import { Spinner } from "@/components/ui/spinner";
 
 export type AttendanceDeviceConfigurationPayload = Omit<
   AttendanceDevice,
@@ -396,7 +395,7 @@ export function HardwareDeviceConfiguration({
           Cancel
         </button>
         <button type="submit" disabled={busy} className="flex items-center justify-center gap-2 rounded-lg bg-ink px-5 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 disabled:opacity-60">
-          {busy ? <Spinner size={14} /> : <Save size={14} />}
+          <Save size={14} />
           {busy ? "Saving..." : device ? "Update device" : "Save device"}
         </button>
       </div>

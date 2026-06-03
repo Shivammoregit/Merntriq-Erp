@@ -35,6 +35,8 @@ class UserSerializer(serializers.ModelSerializer):
                 "id": membership.campus_id,
                 "name": membership.campus.name,
                 "code": membership.campus.code,
+                "logo_url": membership.campus.logo_url,
+                "logo_alt_text": membership.campus.logo_alt_text,
                 "role": membership.role,
                 "is_primary": membership.is_primary,
                 "can_manage_users": membership.can_manage_users,
@@ -86,6 +88,8 @@ class UserAdminSerializer(serializers.ModelSerializer):
                 "id": membership.campus_id,
                 "name": membership.campus.name,
                 "code": membership.campus.code,
+                "logo_url": membership.campus.logo_url,
+                "logo_alt_text": membership.campus.logo_alt_text,
                 "role": membership.role,
                 "is_primary": membership.is_primary,
                 "can_manage_users": membership.can_manage_users,
@@ -130,8 +134,8 @@ class UserAdminSerializer(serializers.ModelSerializer):
         role_map = {
             UserRole.ADMIN: CampusMemberRole.IT_ADMIN,
             UserRole.TEACHER: CampusMemberRole.TEACHER,
-            UserRole.PARENT: CampusMemberRole.SUPPORT,
             UserRole.STUDENT: CampusMemberRole.SUPPORT,
+            UserRole.PARENT: CampusMemberRole.SUPPORT,
         }
         membership_role = role_map.get(user.role, CampusMemberRole.SUPPORT)
         for index, campus_id in enumerate(dict.fromkeys(campus_ids)):

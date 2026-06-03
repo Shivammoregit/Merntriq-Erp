@@ -16,7 +16,8 @@ Roles:
 - `super_admin`: platform owner and full control
 - `admin`: assigned-campus operations, academic setup, fees, reports, users
 - `teacher`: assigned section attendance and student visibility
-- `parent`: read-only access to linked student data
+- `student`: read-only access to the linked student record
+- `parent`: read-only access to students linked through guardian records
 
 The frontend hides unrelated screens, but the backend remains the authority for access control.
 
@@ -25,9 +26,9 @@ The frontend hides unrelated screens, but the backend remains the authority for 
 - Teachers can view students only for sections where they are assigned as class teacher.
 - Teachers can bulk mark attendance only for their assigned section.
 - Campus admins can read and write records only for campuses assigned through `CampusMembership`.
-- Parents can view only students linked through `StudentGuardian`.
 - Students can view only their linked student profile and academic records.
-- Parent users cannot access audit events or internal setup endpoints beyond their scoped reads.
+- Parents can view only students linked through `StudentGuardian`; they cannot write ERP records or read audit/staff profile data.
+- When `X-Campus-Code` is supplied, tenant middleware routes the request to that campus database alias.
 
 ## Validation
 
@@ -38,6 +39,7 @@ The frontend hides unrelated screens, but the backend remains the authority for 
 - Attendance can be edited only for today and the previous 3 days.
 - Fee amounts and payment amounts must be greater than zero.
 - Payments cannot exceed the outstanding fee amount.
+- Staff, timetable, library, transport, and hostel records validate campus consistency before save.
 
 ## Audit Logging
 

@@ -1,8 +1,8 @@
-export const roleTabs = ["Admin", "Teacher", "Student"] as const;
+export const roleTabs = ["Admin", "Teacher", "Student", "Parent"] as const;
 
 export const overviewMetrics = [
-  { label: "Connected modules", value: "20", delta: "Admissions, SIS, staff, finance, exams, services, analytics, security", tone: "info" },
-  { label: "Active roles", value: "5", delta: "Super Admin, Admin, Teacher, Parent, Student", tone: "accent" },
+  { label: "Connected modules", value: "21", delta: "Admissions, SIS, parent portal, staff, finance, exams, services, analytics, security", tone: "info" },
+  { label: "Active roles", value: "5", delta: "Super Admin, Admin, Teacher, Student, Parent", tone: "accent" },
   { label: "Core records", value: "20+", delta: "Campus, users, students, attendance, fees, academics, support, audit", tone: "warning" },
   { label: "Workflow lanes", value: "8", delta: "Admissions, People, Academics, Operations, Finance, Services, Leadership, Security", tone: "danger" }
 ] as const;
@@ -15,7 +15,7 @@ export const workflowPhases = [
     title: "Login, register, and route by role",
     description:
       "The frontend starts with a secure login gate, then sends the user to the correct workspace based on the backend role returned by JWT.",
-    backend: ["accounts.UserRole", "JWT token pair", "Current user profile"],
+    backend: ["accounts.UserRole", "JWT token pair", "Current user profile", "Parent guardian links"],
     ui: ["Login / Register", "Role decision", "Session shell"],
     outcome: "Authenticated access with role-specific landing"
   },
@@ -106,5 +106,6 @@ export const flowNodes = [
 export const roleWorkspaces = {
   Admin: ["Admissions", "SIS", "Staff", "Fees", "Exams", "Services", "Reports"],
   Teacher: ["My classes", "Attendance", "Homework", "Resources", "Results", "Timetable"],
-  Student: ["Homework", "Attendance", "Results", "Notes", "Admit card", "Library"]
+  Student: ["Homework", "Attendance", "Results", "Notes", "Admit card", "Library"],
+  Parent: ["Linked students", "Attendance", "Fees", "Results", "Transport", "Hostel"]
 } as const;

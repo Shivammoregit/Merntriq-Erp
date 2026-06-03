@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+import re
 
 import environ
 
@@ -18,6 +19,8 @@ env = environ.Env(
     DJANGO_THROTTLE_CAPTCHA_RATE=(str, "30/minute"),
     DJANGO_THROTTLE_HARDWARE_CAPTURE_RATE=(str, "1200/minute"),
     DJANGO_CACHE_URL=(str, ""),
+    CAMPUS_DATABASE_URLS=(str, ""),
+    DJANGO_TENANT_ROUTED_APPS=(str, "admin,auth,contenttypes,sessions,token_blacklist,accounts,core"),
 )
 
 environ.Env.read_env(BASE_DIR.parent / ".env")
@@ -50,6 +53,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "apps.core.middleware.CampusTenantMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -74,6 +78,27 @@ TEMPLATES = [
     }
 ]
 
+def campus_database_alias(campus_code: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", campus_code.strip().lower()).strip("_")
+    return f"campus_{slug}" if slug else ""
+
+
+def parse_campus_database_urls(raw_value: str) -> tuple[dict, dict[str, str]]:
+    databases = {}
+    aliases = {}
+    for entry in [item.strip() for item in raw_value.split(";") if item.strip()]:
+        if "=" not in entry:
+            raise ValueError("CAMPUS_DATABASE_URLS entries must use CAMPUS_CODE=database_url format.")
+        campus_code, database_url = entry.split("=", 1)
+        campus_code = campus_code.strip().upper()
+        alias = campus_database_alias(campus_code)
+        if not alias:
+            raise ValueError("CAMPUS_DATABASE_URLS contains an empty campus code.")
+        databases[alias] = environ.Env.db_url_config(database_url.strip())
+        aliases[campus_code] = alias
+    return databases, aliases
+
+
 if env("DJANGO_USE_SQLITE"):
     DATABASES = {
         "default": {
@@ -92,6 +117,17 @@ else:
             "PORT": env("POSTGRES_PORT", default="5432"),
         }
     }
+
+CAMPUS_DATABASES, CAMPUS_DATABASE_ALIASES = parse_campus_database_urls(env("CAMPUS_DATABASE_URLS"))
+DATABASES.update(CAMPUS_DATABASES)
+CAMPUS_DATABASE_ALIAS_SET = set(CAMPUS_DATABASES.keys())
+TENANT_ROUTED_APPS = tuple(
+    item.strip()
+    for item in env("DJANGO_TENANT_ROUTED_APPS").split(",")
+    if item.strip()
+)
+TENANT_CAMPUS_HEADER = "HTTP_X_CAMPUS_CODE"
+DATABASE_ROUTERS = ["apps.core.db_router.CampusTenantRouter"]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

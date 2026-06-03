@@ -1,7 +1,9 @@
 from datetime import date, time, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.urls import reverse
+from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -25,7 +27,35 @@ from apps.core.models import (
     Student,
     StudentGuardian,
     SupportTicket,
+    TeacherSubjectAllocation,
 )
+from apps.core.db_router import CampusTenantRouter
+from apps.core.tenant import activate_campus_tenant, normalize_campus_database_alias, reset_campus_tenant
+
+
+class CampusTenantRoutingTests(SimpleTestCase):
+    @override_settings(
+        CAMPUS_DATABASE_ALIAS_SET={"campus_m360_main"},
+        TENANT_ROUTED_APPS=("accounts", "core"),
+    )
+    def test_router_uses_active_campus_database_alias(self):
+        router = CampusTenantRouter()
+        settings.DATABASES["campus_m360_main"] = settings.DATABASES["default"].copy()
+
+        try:
+            self.assertEqual(normalize_campus_database_alias("M360-MAIN"), "campus_m360_main")
+            self.assertIsNone(router.db_for_read(Student))
+
+            tokens = activate_campus_tenant("M360-MAIN", "campus_m360_main")
+            try:
+                self.assertEqual(router.db_for_read(Student), "campus_m360_main")
+                self.assertEqual(router.db_for_write(Student), "campus_m360_main")
+            finally:
+                reset_campus_tenant(tokens)
+
+            self.assertIsNone(router.db_for_read(Student))
+        finally:
+            settings.DATABASES.pop("campus_m360_main", None)
 
 
 class ERPRoleFlowTests(APITestCase):
@@ -214,15 +244,34 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(response.data["rs485_function"], "software")
         self.assertEqual(response.data["configured_by"], self.admin.id)
 
-    def test_parent_is_scoped_to_linked_student_and_cannot_read_audit(self):
+    def test_parent_can_read_linked_student_workspace_only(self):
         self.authenticate(self.parent)
 
         students_response = self.client.get("/api/v1/students/")
+        attendance_response = self.client.get("/api/v1/attendance-records/")
+        fees_response = self.client.get("/api/v1/fee-assignments/")
         audit_response = self.client.get("/api/v1/audit-events/")
+        write_response = self.client.post(
+            "/api/v1/students/",
+            {
+                "campus": self.campus.id,
+                "section": self.section.id,
+                "admission_number": "ADM-PARENT-BLOCKED",
+                "first_name": "Blocked",
+                "last_name": "Student",
+                "date_of_birth": "2015-05-10",
+                "status": "active",
+            },
+            format="json",
+        )
 
         self.assertEqual(students_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(students_response.data), 1)
+        self.assertEqual(students_response.data[0]["id"], self.student.id)
+        self.assertEqual(attendance_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(fees_response.status_code, status.HTTP_200_OK)
         self.assertEqual(audit_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_admin_is_scoped_to_assigned_campus(self):
         self.authenticate(self.admin)
@@ -256,6 +305,28 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual([item["id"] for item in campus_response.data], [self.campus.id])
         self.assertEqual(blocked_student.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(blocked_user.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_super_admin_can_configure_campus_branding(self):
+        logo_data = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'></svg>"
+
+        self.authenticate(self.admin)
+        denied = self.client.patch(
+            f"/api/v1/campuses/{self.campus.id}/",
+            {"logo_url": logo_data, "logo_alt_text": "Main Campus"},
+            format="json",
+        )
+
+        self.authenticate(self.super_admin)
+        response = self.client.patch(
+            f"/api/v1/campuses/{self.campus.id}/",
+            {"logo_url": logo_data, "logo_alt_text": "Main Campus"},
+            format="json",
+        )
+
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["logo_url"], logo_data)
+        self.assertEqual(response.data["logo_alt_text"], "Main Campus")
 
     def test_audit_events_are_scoped_for_admin_and_global_for_super_admin(self):
         main_event = AuditEvent.objects.create(
@@ -324,6 +395,48 @@ class ERPRoleFlowTests(APITestCase):
         )
         self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_subject_teacher_can_mark_only_allotted_subject_attendance(self):
+        TeacherSubjectAllocation.objects.create(
+            campus=self.campus,
+            section=self.section,
+            teacher=self.other_teacher,
+            subject="Science",
+            weekly_periods=5,
+        )
+
+        self.authenticate(self.other_teacher)
+        allocations = self.client.get("/api/v1/teacher-subject-allocations/")
+        students = self.client.get(f"/api/v1/students/?section={self.section.id}")
+        allowed = self.client.post(
+            "/api/v1/attendance-records/bulk-upsert/",
+            {
+                "section": self.section.id,
+                "date": timezone.localdate().isoformat(),
+                "subject": "Science",
+                "records": [{"student": self.student.id, "status": "present"}],
+            },
+            format="json",
+        )
+        denied = self.client.post(
+            "/api/v1/attendance-records/bulk-upsert/",
+            {
+                "section": self.section.id,
+                "date": timezone.localdate().isoformat(),
+                "subject": "Mathematics",
+                "records": [{"student": self.student.id, "status": "absent"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(allocations.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["subject"] for item in allocations.data], ["Science"])
+        self.assertEqual(students.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(students.data), 1)
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+        saved = AttendanceRecord.objects.get(student=self.student, date=timezone.localdate(), subject="Science")
+        self.assertEqual(saved.marked_by, self.other_teacher)
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_attendance_older_than_three_days_is_locked(self):
         self.authenticate(self.teacher)
         response = self.client.post(
@@ -370,6 +483,170 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(len(admit_cards_response.data), 1)
         self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_admin_can_manage_operations_and_parent_can_read_linked_services(self):
+        self.authenticate(self.admin)
+
+        staff_response = self.client.post(
+            "/api/v1/staff-profiles/",
+            {
+                "campus": self.campus.id,
+                "user": self.teacher.id,
+                "employee_code": "EMP-001",
+                "designation": "Class Teacher",
+                "department": "Academics",
+                "employment_type": "full_time",
+                "joining_date": "2026-04-01",
+                "qualification": "B.Ed",
+                "emergency_contact": "9876500101",
+                "status": "active",
+            },
+            format="json",
+        )
+        slot_response = self.client.post(
+            "/api/v1/timetable-slots/",
+            {
+                "campus": self.campus.id,
+                "section": self.section.id,
+                "teacher": self.teacher.id,
+                "subject": "Mathematics",
+                "day_of_week": 1,
+                "start_time": "09:00",
+                "end_time": "09:40",
+                "room": "A-101",
+                "effective_from": "2026-04-01",
+                "effective_to": None,
+            },
+            format="json",
+        )
+        book_response = self.client.post(
+            "/api/v1/library-books/",
+            {
+                "campus": self.campus.id,
+                "accession_number": "LIB-001",
+                "title": "Mathematics Skill Builder",
+                "author": "R. Menon",
+                "isbn": "",
+                "category": "Academics",
+                "total_copies": 4,
+                "available_copies": 3,
+                "shelf_location": "A1",
+                "status": "active",
+            },
+            format="json",
+        )
+        loan_response = self.client.post(
+            "/api/v1/library-loans/",
+            {
+                "campus": self.campus.id,
+                "book": book_response.data["id"],
+                "student": self.student.id,
+                "staff_user": None,
+                "issued_on": "2026-05-01",
+                "due_on": "2026-05-15",
+                "returned_on": None,
+                "fine_amount": "0.00",
+                "status": "issued",
+            },
+            format="json",
+        )
+        route_response = self.client.post(
+            "/api/v1/transport-routes/",
+            {
+                "campus": self.campus.id,
+                "name": "Main East Route",
+                "route_code": "TR-EAST",
+                "start_point": "Indiranagar",
+                "end_point": "Campus Gate",
+                "stops": ["Indiranagar", "Domlur"],
+                "is_active": True,
+            },
+            format="json",
+        )
+        vehicle_response = self.client.post(
+            "/api/v1/transport-vehicles/",
+            {
+                "campus": self.campus.id,
+                "route": route_response.data["id"],
+                "vehicle_number": "KA-01-MQ-3601",
+                "driver_name": "Ramesh Kumar",
+                "driver_phone": "9876500601",
+                "capacity": 36,
+                "gps_device_id": "GPS-MAIN-01",
+                "is_active": True,
+            },
+            format="json",
+        )
+        transport_response = self.client.post(
+            "/api/v1/student-transport-assignments/",
+            {
+                "student": self.student.id,
+                "route": route_response.data["id"],
+                "vehicle": vehicle_response.data["id"],
+                "pickup_stop": "Indiranagar",
+                "drop_stop": "Campus Gate",
+                "start_date": "2026-04-01",
+                "end_date": None,
+                "fee_amount": "6000.00",
+                "is_active": True,
+            },
+            format="json",
+        )
+        room_response = self.client.post(
+            "/api/v1/hostel-rooms/",
+            {
+                "campus": self.campus.id,
+                "hostel_name": "Main Hostel",
+                "room_number": "A-101",
+                "floor": "1",
+                "capacity": 4,
+                "is_active": True,
+            },
+            format="json",
+        )
+        hostel_response = self.client.post(
+            "/api/v1/hostel-allocations/",
+            {
+                "student": self.student.id,
+                "room": room_response.data["id"],
+                "bed_number": "A-101-A",
+                "start_date": "2026-04-01",
+                "end_date": None,
+                "fee_amount": "18000.00",
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        for response in (
+            staff_response,
+            slot_response,
+            book_response,
+            loan_response,
+            route_response,
+            vehicle_response,
+            transport_response,
+            room_response,
+            hostel_response,
+        ):
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        self.authenticate(self.parent)
+        parent_slots = self.client.get("/api/v1/timetable-slots/")
+        parent_loans = self.client.get("/api/v1/library-loans/")
+        parent_transport = self.client.get("/api/v1/student-transport-assignments/")
+        parent_hostel = self.client.get("/api/v1/hostel-allocations/")
+        parent_staff = self.client.get("/api/v1/staff-profiles/")
+
+        self.assertEqual(parent_slots.status_code, status.HTTP_200_OK)
+        self.assertEqual(parent_loans.status_code, status.HTTP_200_OK)
+        self.assertEqual(parent_transport.status_code, status.HTTP_200_OK)
+        self.assertEqual(parent_hostel.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(parent_slots.data), 1)
+        self.assertEqual(len(parent_loans.data), 1)
+        self.assertEqual(len(parent_transport.data), 1)
+        self.assertEqual(len(parent_hostel.data), 1)
+        self.assertEqual(parent_staff.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_announcements_are_visible_by_audience(self):
         Announcement.objects.create(title="All notice", message="For everyone", audience="all", created_by=self.admin)
         Announcement.objects.create(title="Staff notice", message="For staff", audience="staff", created_by=self.admin)
@@ -389,6 +666,14 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(student_response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             {item["title"] for item in student_response.data},
+            {"All notice", "Learner notice"},
+        )
+
+        self.authenticate(self.parent)
+        parent_response = self.client.get("/api/v1/announcements/")
+        self.assertEqual(parent_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["title"] for item in parent_response.data},
             {"All notice", "Learner notice"},
         )
 
@@ -413,10 +698,10 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         ticket_id = create_response.data["id"]
 
-        self.authenticate(self.parent)
-        parent_response = self.client.get("/api/v1/support-tickets/")
-        self.assertEqual(parent_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(parent_response.data, [])
+        self.authenticate(self.teacher)
+        teacher_response = self.client.get("/api/v1/support-tickets/")
+        self.assertEqual(teacher_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(teacher_response.data, [])
 
         self.authenticate(self.super_admin)
         queue_response = self.client.get("/api/v1/support-tickets/?status=open")

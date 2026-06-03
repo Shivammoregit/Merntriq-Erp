@@ -17,21 +17,53 @@ from .models import (
     CampusMembership,
     ClassSection,
     FeeAssignment,
+    HostelAllocation,
+    HostelRoom,
+    LibraryBook,
+    LibraryLoan,
     LearningResource,
     Payment,
     ResultRecord,
     StaffAttendanceRecord,
+    StaffProfile,
     Student,
     StudentGuardian,
+    StudentTransportAssignment,
     SupportTicket,
+    TeacherSubjectAllocation,
+    TimetableSlot,
+    TransportRoute,
+    TransportVehicle,
 )
 
 
 class CampusSerializer(serializers.ModelSerializer):
     class Meta:
         model = Campus
-        fields = ("id", "name", "code", "address", "created_at", "updated_at")
+        fields = (
+            "id",
+            "name",
+            "code",
+            "address",
+            "logo_url",
+            "logo_alt_text",
+            "database_alias",
+            "database_name",
+            "created_at",
+            "updated_at",
+        )
         read_only_fields = ("created_at", "updated_at")
+
+    def validate_logo_url(self, value: str) -> str:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            return ""
+        allowed_prefixes = ("https://", "http://", "data:image/png;", "data:image/jpeg;", "data:image/webp;", "data:image/svg+xml;")
+        if not cleaned.startswith(allowed_prefixes):
+            raise serializers.ValidationError("Use an http(s) URL or an uploaded PNG, JPG, WEBP, or SVG logo.")
+        if len(cleaned) > 750_000:
+            raise serializers.ValidationError("Logo is too large. Use an image below 500 KB.")
+        return cleaned
 
 
 class CampusMembershipSerializer(serializers.ModelSerializer):
@@ -178,6 +210,52 @@ class ClassSectionSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class TeacherSubjectAllocationSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+    section_label = serializers.SerializerMethodField()
+    teacher_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TeacherSubjectAllocation
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "section",
+            "section_label",
+            "teacher",
+            "teacher_name",
+            "subject",
+            "weekly_periods",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def get_section_label(self, obj: TeacherSubjectAllocation) -> str:
+        return f"{obj.section.grade_name} - {obj.section.section_name}"
+
+    def get_teacher_name(self, obj: TeacherSubjectAllocation) -> str:
+        return obj.teacher.get_full_name() or obj.teacher.username
+
+    def validate_subject(self, value: str) -> str:
+        subject = (value or "").strip()
+        if not subject:
+            raise serializers.ValidationError("Subject is required.")
+        return subject
+
+    def validate(self, attrs):
+        campus = attrs.get("campus", getattr(self.instance, "campus", None))
+        section = attrs.get("section", getattr(self.instance, "section", None))
+        teacher = attrs.get("teacher", getattr(self.instance, "teacher", None))
+        if campus and section and section.campus_id != campus.id:
+            raise serializers.ValidationError({"section": "Section must belong to the selected campus."})
+        if teacher and teacher.role != UserRole.TEACHER:
+            raise serializers.ValidationError({"teacher": "Select a user with the teacher role."})
+        return attrs
+
+
 class StudentSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     campus_name = serializers.CharField(source="campus.name", read_only=True)
@@ -265,6 +343,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "section",
             "section_label",
             "date",
+            "subject",
             "status",
             "marked_by",
             "capture_method",
@@ -290,8 +369,20 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             ensure_attendance_date_is_editable(attendance_date)
         if student and section and student.section_id != section.id:
             raise serializers.ValidationError({"section": "Attendance section must match the student's section."})
-        if user and getattr(user, "role", None) == UserRole.TEACHER and section and section.class_teacher_id != user.id:
-            raise serializers.ValidationError({"section": "Teachers can mark attendance only for assigned sections."})
+        subject = (attrs.get("subject", getattr(self.instance, "subject", "")) or "").strip()
+        attrs["subject"] = subject
+        if user and getattr(user, "role", None) == UserRole.TEACHER and section:
+            is_class_teacher = section.class_teacher_id == user.id
+            has_subject_access = bool(subject) and TeacherSubjectAllocation.objects.filter(
+                section=section,
+                teacher=user,
+                subject__iexact=subject,
+                is_active=True,
+            ).exists()
+            if not (is_class_teacher or has_subject_access):
+                raise serializers.ValidationError(
+                    {"section": "Teachers can mark attendance only for assigned class sections or allotted subjects."}
+                )
         device = attrs.get("device", getattr(self.instance, "device", None))
         if device and student and device.campus_id != student.campus_id:
             raise serializers.ValidationError({"device": "Attendance device must belong to the student's campus."})
@@ -346,10 +437,353 @@ class StaffAttendanceRecordSerializer(serializers.ModelSerializer):
         attendance_date = attrs.get("date", getattr(self.instance, "date", None))
         if attendance_date:
             ensure_attendance_date_is_editable(attendance_date)
-        if staff_user and staff_user.role == UserRole.STUDENT:
-            raise serializers.ValidationError({"staff_user": "Staff attendance cannot be recorded for student users."})
+        if staff_user and staff_user.role in (UserRole.STUDENT, UserRole.PARENT):
+            raise serializers.ValidationError({"staff_user": "Staff attendance cannot be recorded for student or parent users."})
         if device and campus and device.campus_id != campus.id:
             raise serializers.ValidationError({"device": "Attendance device must belong to the selected campus."})
+        return attrs
+
+
+class StaffProfileSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+    user_name = serializers.SerializerMethodField()
+    user_role = serializers.CharField(source="user.role", read_only=True)
+
+    class Meta:
+        model = StaffProfile
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "user",
+            "user_name",
+            "user_role",
+            "employee_code",
+            "designation",
+            "department",
+            "employment_type",
+            "joining_date",
+            "qualification",
+            "emergency_contact",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def get_user_name(self, obj: StaffProfile) -> str:
+        return obj.user.get_full_name() or obj.user.username
+
+    def validate(self, attrs):
+        user = attrs.get("user", getattr(self.instance, "user", None))
+        if user and user.role in (UserRole.STUDENT, UserRole.PARENT):
+            raise serializers.ValidationError({"user": "Staff profile users must be administrators or teachers."})
+        return attrs
+
+
+class TimetableSlotSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+    section_label = serializers.SerializerMethodField()
+    teacher_name = serializers.SerializerMethodField()
+    day_name = serializers.CharField(source="get_day_of_week_display", read_only=True)
+
+    class Meta:
+        model = TimetableSlot
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "section",
+            "section_label",
+            "teacher",
+            "teacher_name",
+            "subject",
+            "day_of_week",
+            "day_name",
+            "start_time",
+            "end_time",
+            "room",
+            "effective_from",
+            "effective_to",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def get_section_label(self, obj: TimetableSlot) -> str:
+        return f"{obj.section.grade_name} - {obj.section.section_name}"
+
+    def get_teacher_name(self, obj: TimetableSlot) -> str:
+        if not obj.teacher:
+            return ""
+        return obj.teacher.get_full_name() or obj.teacher.username
+
+    def validate(self, attrs):
+        campus = attrs.get("campus", getattr(self.instance, "campus", None))
+        section = attrs.get("section", getattr(self.instance, "section", None))
+        teacher = attrs.get("teacher", getattr(self.instance, "teacher", None))
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        effective_from = attrs.get("effective_from", getattr(self.instance, "effective_from", None))
+        effective_to = attrs.get("effective_to", getattr(self.instance, "effective_to", None))
+        subject = (attrs.get("subject", getattr(self.instance, "subject", "")) or "").strip()
+        attrs["subject"] = subject
+        if campus and section and section.campus_id != campus.id:
+            raise serializers.ValidationError({"section": "Section must belong to the selected campus."})
+        if teacher and teacher.role != UserRole.TEACHER:
+            raise serializers.ValidationError({"teacher": "Timetable teacher must be a teacher user."})
+        if start_time and end_time and end_time <= start_time:
+            raise serializers.ValidationError({"end_time": "End time must be after start time."})
+        if effective_from and effective_to and effective_to < effective_from:
+            raise serializers.ValidationError({"effective_to": "End date must be on or after the effective from date."})
+        if not subject:
+            raise serializers.ValidationError({"subject": "Subject is required."})
+        return attrs
+
+
+class LibraryBookSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+
+    class Meta:
+        model = LibraryBook
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "accession_number",
+            "title",
+            "author",
+            "isbn",
+            "category",
+            "total_copies",
+            "available_copies",
+            "shelf_location",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def validate(self, attrs):
+        total = attrs.get("total_copies", getattr(self.instance, "total_copies", 1))
+        available = attrs.get("available_copies", getattr(self.instance, "available_copies", 1))
+        if available > total:
+            raise serializers.ValidationError({"available_copies": "Available copies cannot exceed total copies."})
+        return attrs
+
+
+class LibraryLoanSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+    book_title = serializers.CharField(source="book.title", read_only=True)
+    borrower_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LibraryLoan
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "book",
+            "book_title",
+            "student",
+            "staff_user",
+            "borrower_name",
+            "issued_on",
+            "due_on",
+            "returned_on",
+            "fine_amount",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def get_borrower_name(self, obj: LibraryLoan) -> str:
+        if obj.student_id:
+            return obj.student.full_name
+        if obj.staff_user_id:
+            return obj.staff_user.get_full_name() or obj.staff_user.username
+        return ""
+
+    def validate(self, attrs):
+        campus = attrs.get("campus", getattr(self.instance, "campus", None))
+        book = attrs.get("book", getattr(self.instance, "book", None))
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        staff_user = attrs.get("staff_user", getattr(self.instance, "staff_user", None))
+        issued_on = attrs.get("issued_on", getattr(self.instance, "issued_on", None))
+        due_on = attrs.get("due_on", getattr(self.instance, "due_on", None))
+        returned_on = attrs.get("returned_on", getattr(self.instance, "returned_on", None))
+        fine_amount = attrs.get("fine_amount", getattr(self.instance, "fine_amount", 0))
+        if bool(student) == bool(staff_user):
+            raise serializers.ValidationError({"student": "Select exactly one borrower: student or staff user."})
+        if campus and book and book.campus_id != campus.id:
+            raise serializers.ValidationError({"book": "Book must belong to the selected campus."})
+        if campus and student and student.campus_id != campus.id:
+            raise serializers.ValidationError({"student": "Student must belong to the selected campus."})
+        if staff_user and staff_user.role == UserRole.STUDENT:
+            raise serializers.ValidationError({"staff_user": "Use the student borrower field for student users."})
+        if issued_on and due_on and due_on < issued_on:
+            raise serializers.ValidationError({"due_on": "Due date must be on or after issue date."})
+        if issued_on and returned_on and returned_on < issued_on:
+            raise serializers.ValidationError({"returned_on": "Return date must be on or after issue date."})
+        if fine_amount < 0:
+            raise serializers.ValidationError({"fine_amount": "Fine amount cannot be negative."})
+        return attrs
+
+
+class TransportRouteSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+
+    class Meta:
+        model = TransportRoute
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "name",
+            "route_code",
+            "start_point",
+            "end_point",
+            "stops",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+
+class TransportVehicleSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+    route_name = serializers.CharField(source="route.name", read_only=True)
+
+    class Meta:
+        model = TransportVehicle
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "route",
+            "route_name",
+            "vehicle_number",
+            "driver_name",
+            "driver_phone",
+            "capacity",
+            "gps_device_id",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def validate(self, attrs):
+        campus = attrs.get("campus", getattr(self.instance, "campus", None))
+        route = attrs.get("route", getattr(self.instance, "route", None))
+        if campus and route and route.campus_id != campus.id:
+            raise serializers.ValidationError({"route": "Route must belong to the selected campus."})
+        return attrs
+
+
+class StudentTransportAssignmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
+    route_name = serializers.CharField(source="route.name", read_only=True)
+    vehicle_number = serializers.CharField(source="vehicle.vehicle_number", read_only=True)
+
+    class Meta:
+        model = StudentTransportAssignment
+        fields = (
+            "id",
+            "student",
+            "student_name",
+            "route",
+            "route_name",
+            "vehicle",
+            "vehicle_number",
+            "pickup_stop",
+            "drop_stop",
+            "start_date",
+            "end_date",
+            "fee_amount",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def validate(self, attrs):
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        route = attrs.get("route", getattr(self.instance, "route", None))
+        vehicle = attrs.get("vehicle", getattr(self.instance, "vehicle", None))
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        fee_amount = attrs.get("fee_amount", getattr(self.instance, "fee_amount", 0))
+        if student and route and student.campus_id != route.campus_id:
+            raise serializers.ValidationError({"route": "Route must belong to the student's campus."})
+        if vehicle and route and vehicle.campus_id != route.campus_id:
+            raise serializers.ValidationError({"vehicle": "Vehicle must belong to the route campus."})
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({"end_date": "End date must be on or after start date."})
+        if fee_amount < 0:
+            raise serializers.ValidationError({"fee_amount": "Transport fee cannot be negative."})
+        return attrs
+
+
+class HostelRoomSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source="campus.name", read_only=True)
+
+    class Meta:
+        model = HostelRoom
+        fields = (
+            "id",
+            "campus",
+            "campus_name",
+            "hostel_name",
+            "room_number",
+            "floor",
+            "capacity",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+
+class HostelAllocationSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
+    room_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HostelAllocation
+        fields = (
+            "id",
+            "student",
+            "student_name",
+            "room",
+            "room_label",
+            "bed_number",
+            "start_date",
+            "end_date",
+            "fee_amount",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("created_at", "updated_at")
+
+    def get_room_label(self, obj: HostelAllocation) -> str:
+        return f"{obj.room.hostel_name} {obj.room.room_number}"
+
+    def validate(self, attrs):
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        room = attrs.get("room", getattr(self.instance, "room", None))
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        fee_amount = attrs.get("fee_amount", getattr(self.instance, "fee_amount", 0))
+        if student and room and student.campus_id != room.campus_id:
+            raise serializers.ValidationError({"room": "Hostel room must belong to the student's campus."})
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({"end_date": "End date must be on or after start date."})
+        if fee_amount < 0:
+            raise serializers.ValidationError({"fee_amount": "Hostel fee cannot be negative."})
         return attrs
 
 

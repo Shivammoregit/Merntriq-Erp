@@ -26,6 +26,8 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Badge } from "@/components/ui/badge";
 
+type ModuleTargetTab = "dashboard" | "modules" | "records" | "campus" | "attendance" | "academics" | "fees" | "reports" | "student";
+
 const statusTone: Record<Campus360ModuleStatus, string> = {
   live: "border-emerald-200 bg-emerald-50 text-emerald-700",
   configured: "border-blue-200 bg-blue-50 text-blue-700",
@@ -59,12 +61,32 @@ function roleName(role?: string) {
     .join(" ");
 }
 
-export function Campus360Modules() {
+function workflowTarget(module: { id: string; area: Campus360ModuleArea }): ModuleTargetTab {
+  if (module.id === "attendance-management") return "attendance";
+  if (module.id === "fees-management") return "fees";
+  if (module.id === "analytics-reports" || module.id === "director-dashboard") return "reports";
+  if (module.id === "security-access-control" || module.id === "staff-employee-management") return "campus";
+  if (module.area === "Admissions" || module.area === "People") return "records";
+  if (module.area === "Academics") return "academics";
+  if (module.area === "Finance") return "fees";
+  if (module.area === "Leadership") return "reports";
+  if (module.area === "Operations") return "attendance";
+  return "modules";
+}
+
+export function Campus360Modules({
+  allowedTabs = [],
+  onNavigate,
+}: {
+  allowedTabs?: string[];
+  onNavigate?: (tab: ModuleTargetTab) => void;
+}) {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [area, setArea] = useState<Campus360ModuleArea | "all">("all");
   const [status, setStatus] = useState<Campus360ModuleStatus | "all">("all");
   const [scope, setScope] = useState<"role" | "all">("role");
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
   const roleModules = useMemo(() => (user ? modulesForRole(user.role) : campus360Modules), [user]);
   const currentRole = user ? roleDefinitionFor(user.role) : undefined;
@@ -95,6 +117,10 @@ export function Campus360Modules() {
       modules: modulesForRole(role.role).length,
     }))
   ), []);
+  const selectedModule = useMemo(
+    () => campus360Modules.find((module) => module.id === selectedModuleId) ?? null,
+    [selectedModuleId],
+  );
 
   return (
     <div className="space-y-6">
@@ -260,6 +286,9 @@ export function Campus360Modules() {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibleModules.map((module) => {
           const Icon = module.icon;
+          const target = workflowTarget(module);
+          const permission = user ? module.permissions[user.role] : undefined;
+          const canOpenWorkflow = Boolean(permission && onNavigate && allowedTabs.includes(target));
           return (
             <article key={module.id} className="surface flex flex-col p-4 shadow-sm sm:p-5 md:min-h-[22rem]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -329,9 +358,26 @@ export function Campus360Modules() {
                 </div>
               </div>
 
-              <div className="mt-5 flex items-center justify-between border-t border-line/60 pt-4 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-                Module
-                <ArrowRight size={15} />
+              <div className="mt-5 grid gap-2 border-t border-line/60 pt-4 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedModuleId(module.id)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-line/70 bg-white px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted hover:bg-slate-50 hover:text-ink"
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => canOpenWorkflow ? onNavigate?.(target) : setSelectedModuleId(module.id)}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold uppercase tracking-[0.12em] ${
+                    canOpenWorkflow
+                      ? "bg-ink text-white hover:bg-slate-900"
+                      : "border border-line/70 bg-slate-50 text-muted hover:bg-white hover:text-ink"
+                  }`}
+                >
+                  {canOpenWorkflow ? "Open" : "Checklist"}
+                  <ArrowRight size={15} />
+                </button>
               </div>
             </article>
           );
@@ -342,6 +388,57 @@ export function Campus360Modules() {
         <section className="surface px-5 py-12 text-center">
           <p className="font-semibold text-ink">No modules found.</p>
           <p className="mt-2 text-sm text-muted">Clear search or choose all groups.</p>
+        </section>
+      )}
+
+      {selectedModule && (
+        <section className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-3xl overflow-hidden rounded-lg border border-line/70 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-line/70 bg-slate-50 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Module {String(selectedModule.number).padStart(2, "0")}</p>
+                <h2 className="mt-1 text-xl font-semibold text-ink">{selectedModule.title}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedModuleId(null)} className="rounded-lg border border-line/70 bg-white px-3 py-2 text-sm font-semibold text-ink hover:bg-slate-50">
+                Close
+              </button>
+            </div>
+            <div className="max-h-[calc(100dvh-6rem)] overflow-y-auto p-5">
+              <div className="grid gap-4 md:grid-cols-[0.85fr_1.15fr]">
+                <div className="rounded-lg border border-line/70 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Owner</p>
+                  <p className="mt-1 font-semibold text-ink">{selectedModule.owner}</p>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-muted">Stage</p>
+                  <p className="mt-1 text-sm text-ink">{statusLabel(selectedModule.status)}</p>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-muted">Access</p>
+                  <p className="mt-1 text-sm text-ink">{user ? permissionLabel(selectedModule.permissions[user.role]) : "Login required"}</p>
+                </div>
+                <div>
+                  <p className="text-sm leading-7 text-muted">{selectedModule.summary}</p>
+                  <p className="mt-4 text-sm font-semibold text-ink">Workflow checklist</p>
+                  <div className="mt-3 grid gap-2">
+                    {selectedModule.features.map((feature) => (
+                      <div key={feature} className="flex items-start gap-2 rounded-lg border border-line/70 bg-white px-3 py-2 text-sm text-ink">
+                        <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-teal-700" />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-lg border border-line/70 bg-white p-4">
+                <p className="text-sm font-semibold text-ink">Screen elements required</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedModule.components.map((component) => (
+                    <span key={component} className="rounded-md border border-line/70 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-muted">
+                      {component}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
       )}
     </div>

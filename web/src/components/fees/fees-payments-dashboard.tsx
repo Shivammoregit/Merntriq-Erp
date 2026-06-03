@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
-import { Spinner } from "@/components/ui/spinner";
+import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
 // ─── Fee form ─────────────────────────────────────────────────────────────────
 function FeeForm({
@@ -87,7 +87,6 @@ function FeeForm({
       <div className="flex justify-end gap-3 border-t border-line/60 pt-4">
         <button type="button" onClick={onCancel} className="rounded-2xl border border-line/70 px-4 py-2 text-sm font-medium text-ink hover:bg-slate-50">Cancel</button>
         <button id="fee-save-btn" type="submit" disabled={busy} className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-600 to-blue-700 px-5 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 disabled:opacity-60">
-          {busy && <Spinner size={14} />}
           {busy ? "Saving…" : "Create fee"}
         </button>
       </div>
@@ -166,7 +165,6 @@ function PaymentForm({
       <div className="flex justify-end gap-3 border-t border-line/60 pt-4">
         <button type="button" onClick={onCancel} className="rounded-2xl border border-line/70 px-4 py-2 text-sm font-medium text-ink hover:bg-slate-50">Cancel</button>
         <button id="payment-save-btn" type="submit" disabled={busy} className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-600 to-blue-700 px-5 py-2 text-sm font-semibold text-white shadow transition hover:-translate-y-0.5 disabled:opacity-60">
-          {busy && <Spinner size={14} />}
           {busy ? "Recording…" : "Record payment"}
         </button>
       </div>
@@ -230,12 +228,7 @@ export function FeesPaymentsDashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Spinner size={32} className="text-teal-600" />
-        <p className="text-muted">Loading fees dashboard…</p>
-      </div>
-    );
+    return <WorkspacePlaceholder title="Fees dashboard" detail="Preparing dues, payments, and student accounts." />;
   }
 
   return (

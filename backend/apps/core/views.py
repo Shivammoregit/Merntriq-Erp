@@ -31,15 +31,25 @@ from .models import (
     CampusMembership,
     ClassSection,
     FeeAssignment,
+    HostelAllocation,
+    HostelRoom,
+    LibraryBook,
+    LibraryLoan,
     LearningResource,
     Payment,
     ResultRecord,
     StaffAttendanceRecord,
+    StaffProfile,
     StaffAttendanceStatus,
     Student,
     StudentGuardian,
+    StudentTransportAssignment,
     SupportTicket,
     SupportTicketStatus,
+    TeacherSubjectAllocation,
+    TimetableSlot,
+    TransportRoute,
+    TransportVehicle,
 )
 from .attendance_rules import ensure_attendance_date_is_editable
 from .permissions import RoleAccessPermission
@@ -56,18 +66,46 @@ from .serializers import (
     CampusMembershipSerializer,
     ClassSectionSerializer,
     FeeAssignmentSerializer,
+    HostelAllocationSerializer,
+    HostelRoomSerializer,
+    LibraryBookSerializer,
+    LibraryLoanSerializer,
     LearningResourceSerializer,
     PaymentSerializer,
     ResultRecordSerializer,
     StaffAttendanceRecordSerializer,
+    StaffProfileSerializer,
     StudentSerializer,
     StudentGuardianSerializer,
+    StudentTransportAssignmentSerializer,
     SupportTicketSerializer,
+    TeacherSubjectAllocationSerializer,
+    TimetableSlotSerializer,
+    TransportRouteSerializer,
+    TransportVehicleSerializer,
 )
 
 ADMIN_ROLES = (UserRole.SUPER_ADMIN, UserRole.ADMIN)
-READ_ROLES = (UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.TEACHER, UserRole.PARENT, UserRole.STUDENT)
+READ_ROLES = (UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT, UserRole.PARENT)
 ACADEMIC_WRITE_ROLES = ADMIN_ROLES + (UserRole.TEACHER,)
+
+
+def teacher_section_q(user):
+    return Q(class_teacher=user) | Q(subject_allocations__teacher=user, subject_allocations__is_active=True)
+
+
+def teacher_has_subject_access(user, section: ClassSection, subject: str) -> bool:
+    subject = (subject or "").strip()
+    if section.class_teacher_id == user.id:
+        return True
+    if not subject:
+        return False
+    return TeacherSubjectAllocation.objects.filter(
+        section=section,
+        teacher=user,
+        subject__iexact=subject,
+        is_active=True,
+    ).exists()
 
 
 class HealthCheckView(APIView):
@@ -130,6 +168,18 @@ class RoleScopedModelViewSet(viewsets.ModelViewSet):
         device = attrs.get("device")
         if device:
             return device.campus_id
+        book = attrs.get("book")
+        if book:
+            return book.campus_id
+        route = attrs.get("route")
+        if route:
+            return route.campus_id
+        vehicle = attrs.get("vehicle")
+        if vehicle:
+            return vehicle.campus_id
+        room = attrs.get("room")
+        if room:
+            return room.campus_id
         return None
 
     def ensure_admin_payload_scope(self, attrs) -> None:
@@ -193,11 +243,14 @@ class CampusViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(sections__class_teacher=user).distinct()
-        if user.role == UserRole.PARENT:
-            return queryset.filter(students__guardianships__guardian=user).distinct()
+            return queryset.filter(
+                Q(sections__class_teacher=user)
+                | Q(sections__subject_allocations__teacher=user, sections__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(students__guardianships__guardian=user).distinct()
         return queryset.none()
 
 
@@ -228,7 +281,10 @@ class AttendanceDeviceViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(campus__sections__class_teacher=user).distinct()
+            return queryset.filter(
+                Q(campus__sections__class_teacher=user)
+                | Q(campus__sections__subject_allocations__teacher=user, campus__sections__subject_allocations__is_active=True)
+            ).distinct()
         return queryset.none()
 
     def get_throttles(self):
@@ -278,6 +334,7 @@ class AttendanceDeviceViewSet(RoleScopedModelViewSet):
             record, _ = AttendanceRecord.objects.update_or_create(
                 student=student,
                 date=attendance_date,
+                subject="",
                 defaults={
                     "section": student.section,
                     "status": record_status,
@@ -301,8 +358,8 @@ class AttendanceDeviceViewSet(RoleScopedModelViewSet):
             from apps.accounts.models import User
 
             staff_user = get_object_or_404(User, username=external_id)
-            if staff_user.role == UserRole.STUDENT:
-                raise ValidationError({"external_id": "Student users must use person_type=student."})
+            if staff_user.role in (UserRole.STUDENT, UserRole.PARENT):
+                raise ValidationError({"external_id": "Student and parent users must use person_type=student or portal access."})
             record, _ = StaffAttendanceRecord.objects.update_or_create(
                 staff_user=staff_user,
                 date=attendance_date,
@@ -334,11 +391,14 @@ class AcademicSessionViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(sections__class_teacher=user).distinct()
-        if user.role == UserRole.PARENT:
-            return queryset.filter(sections__students__guardianships__guardian=user).distinct()
+            return queryset.filter(
+                Q(sections__class_teacher=user)
+                | Q(sections__subject_allocations__teacher=user, sections__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(sections__students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(sections__students__guardianships__guardian=user).distinct()
         return queryset.none()
 
 
@@ -351,12 +411,37 @@ class ClassSectionViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(students__guardianships__guardian=user).distinct()
+            return queryset.filter(teacher_section_q(user)).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(students__guardianships__guardian=user).distinct()
         return queryset.none()
+
+
+class TeacherSubjectAllocationViewSet(RoleScopedModelViewSet):
+    queryset = TeacherSubjectAllocation.objects.select_related("campus", "section", "teacher")
+    serializer_class = TeacherSubjectAllocationSerializer
+    campus_filter_path = "campus_id"
+    read_roles = ADMIN_ROLES + (UserRole.TEACHER,)
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "section", "teacher", "subject", "is_active")
+    search_fields = ("subject", "section__grade_name", "section__section_name", "teacher__username", "teacher__first_name", "teacher__last_name")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(teacher=user, is_active=True)
+        return queryset.none()
+
+    def campus_id_from_attrs(self, attrs) -> int | None:
+        campus = attrs.get("campus")
+        if campus:
+            return campus.id
+        section = attrs.get("section")
+        if section:
+            return section.campus_id
+        return None
 
 
 class StudentViewSet(RoleScopedModelViewSet):
@@ -369,11 +454,14 @@ class StudentViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(guardianships__guardian=user).distinct()
+            return queryset.filter(
+                Q(section__class_teacher=user)
+                | Q(section__subject_allocations__teacher=user, section__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(guardianships__guardian=user)
         return queryset.none()
 
 
@@ -388,11 +476,14 @@ class StudentGuardianViewSet(RoleScopedModelViewSet):
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(student__section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(guardian=user)
+            return queryset.filter(
+                Q(student__section__class_teacher=user)
+                | Q(student__section__subject_allocations__teacher=user, student__section__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(guardian=user)
         return queryset.none()
 
 
@@ -402,16 +493,19 @@ class AttendanceRecordViewSet(RoleScopedModelViewSet):
     campus_filter_path = "student__campus_id"
     read_roles = READ_ROLES
     write_roles = ADMIN_ROLES + (UserRole.TEACHER,)
-    filterset_fields = ("date", "status", "section", "capture_method", "device")
+    filterset_fields = ("date", "status", "section", "subject", "capture_method", "device")
 
     def filter_queryset_by_role(self, queryset):
         user = self.request.user
         if user.role == UserRole.TEACHER:
-            return queryset.filter(section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(student__guardianships__guardian=user).distinct()
+            return queryset.filter(
+                Q(section__class_teacher=user)
+                | Q(section__subject_allocations__teacher=user, section__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -433,14 +527,17 @@ class AttendanceRecordViewSet(RoleScopedModelViewSet):
         section = get_object_or_404(ClassSection, pk=request.data.get("section"))
         if user.role == UserRole.ADMIN and section.campus_id not in self.admin_campus_ids():
             raise PermissionDenied("This section belongs to a campus outside your admin scope.")
-        if user.role == UserRole.TEACHER and section.class_teacher_id != user.id:
-            raise PermissionDenied("Teachers can mark attendance only for assigned sections.")
 
         attendance_date = request.data.get("date")
         records = request.data.get("records", [])
         if not attendance_date or not isinstance(records, list):
             raise ValidationError({"detail": "Provide date and records."})
         attendance_date = ensure_attendance_date_is_editable(attendance_date)
+        subject = (request.data.get("subject") or "").strip()
+        if len(subject) > 80:
+            raise ValidationError({"subject": "Subject must be 80 characters or fewer."})
+        if user.role == UserRole.TEACHER and not teacher_has_subject_access(user, section, subject):
+            raise PermissionDenied("Teachers can mark attendance only for assigned class sections or allotted subjects.")
 
         allowed_statuses = {choice.value for choice in AttendanceStatus}
         device = None
@@ -455,13 +552,18 @@ class AttendanceRecordViewSet(RoleScopedModelViewSet):
         saved_records = []
         with transaction.atomic():
             for item in records:
-                student = get_object_or_404(Student, pk=item.get("student"), section=section)
+                try:
+                    student_id = int(item.get("student"))
+                except (TypeError, ValueError):
+                    raise ValidationError({"student": "Provide a valid student id."})
+                student = get_object_or_404(Student, pk=student_id, section=section)
                 record_status = item.get("status")
                 if record_status not in allowed_statuses:
                     raise ValidationError({"status": f"Unsupported attendance status: {record_status}"})
                 record, _ = AttendanceRecord.objects.update_or_create(
                     student=student,
                     date=attendance_date,
+                    subject=subject,
                     defaults={
                         "section": section,
                         "status": record_status,
@@ -480,7 +582,7 @@ class AttendanceRecordViewSet(RoleScopedModelViewSet):
                 entity_id=str(section.pk),
                 summary=f"Bulk attendance for {section} on {attendance_date}",
                 ip_address=get_client_ip(request),
-                metadata={"record_count": len(saved_records)},
+                metadata={"record_count": len(saved_records), "subject": subject},
             )
 
         serializer = self.get_serializer(saved_records, many=True)
@@ -510,6 +612,208 @@ class StaffAttendanceRecordViewSet(RoleScopedModelViewSet):
         self.ensure_admin_payload_scope(serializer.validated_data)
         instance = serializer.save(marked_by=self.request.user)
         self.write_audit(AuditAction.UPDATE, instance)
+
+
+class StaffProfileViewSet(RoleScopedModelViewSet):
+    queryset = StaffProfile.objects.select_related("campus", "user")
+    serializer_class = StaffProfileSerializer
+    campus_filter_path = "campus_id"
+    read_roles = ADMIN_ROLES + (UserRole.TEACHER,)
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "user", "department", "employment_type", "status")
+    search_fields = ("employee_code", "designation", "department", "user__username", "user__first_name", "user__last_name")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(user=user)
+        return queryset.none()
+
+
+class TimetableSlotViewSet(RoleScopedModelViewSet):
+    queryset = TimetableSlot.objects.select_related("campus", "section", "teacher")
+    serializer_class = TimetableSlotSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "section", "teacher", "subject", "day_of_week")
+    search_fields = ("subject", "room", "section__grade_name", "section__section_name", "teacher__username")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(teacher=user)
+                | Q(section__class_teacher=user)
+                | Q(section__subject_allocations__teacher=user, section__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(section__students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(section__students__guardianships__guardian=user).distinct()
+        return queryset.none()
+
+
+class LibraryBookViewSet(RoleScopedModelViewSet):
+    queryset = LibraryBook.objects.select_related("campus")
+    serializer_class = LibraryBookSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "category", "status")
+    search_fields = ("accession_number", "title", "author", "isbn", "category")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(campus__sections__class_teacher=user)
+                | Q(campus__sections__subject_allocations__teacher=user, campus__sections__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(campus__students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(campus__students__guardianships__guardian=user).distinct()
+        return queryset.none()
+
+
+class LibraryLoanViewSet(RoleScopedModelViewSet):
+    queryset = LibraryLoan.objects.select_related("campus", "book", "student", "staff_user")
+    serializer_class = LibraryLoanSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "book", "student", "staff_user", "status", "due_on")
+    search_fields = ("book__title", "student__first_name", "student__last_name", "staff_user__username")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(staff_user=user)
+                | Q(student__section__class_teacher=user)
+                | Q(student__section__subject_allocations__teacher=user, student__section__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
+        return queryset.none()
+
+
+class TransportRouteViewSet(RoleScopedModelViewSet):
+    queryset = TransportRoute.objects.select_related("campus")
+    serializer_class = TransportRouteSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "is_active")
+    search_fields = ("name", "route_code", "start_point", "end_point")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(campus__sections__class_teacher=user)
+                | Q(campus__sections__subject_allocations__teacher=user, campus__sections__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(student_assignments__student__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student_assignments__student__guardianships__guardian=user).distinct()
+        return queryset.none()
+
+
+class TransportVehicleViewSet(RoleScopedModelViewSet):
+    queryset = TransportVehicle.objects.select_related("campus", "route")
+    serializer_class = TransportVehicleSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "route", "is_active")
+    search_fields = ("vehicle_number", "driver_name", "driver_phone", "gps_device_id")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(campus__sections__class_teacher=user)
+                | Q(campus__sections__subject_allocations__teacher=user, campus__sections__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(student_assignments__student__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student_assignments__student__guardianships__guardian=user).distinct()
+        return queryset.none()
+
+
+class StudentTransportAssignmentViewSet(RoleScopedModelViewSet):
+    queryset = StudentTransportAssignment.objects.select_related("student", "route", "vehicle")
+    serializer_class = StudentTransportAssignmentSerializer
+    campus_filter_path = "student__campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("student", "route", "vehicle", "is_active")
+    search_fields = ("student__first_name", "student__last_name", "route__name", "pickup_stop", "drop_stop")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(student__section__class_teacher=user)
+                | Q(student__section__subject_allocations__teacher=user, student__section__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
+        return queryset.none()
+
+
+class HostelRoomViewSet(RoleScopedModelViewSet):
+    queryset = HostelRoom.objects.select_related("campus")
+    serializer_class = HostelRoomSerializer
+    campus_filter_path = "campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("campus", "hostel_name", "is_active")
+    search_fields = ("hostel_name", "room_number", "floor")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(campus__sections__class_teacher=user)
+                | Q(campus__sections__subject_allocations__teacher=user, campus__sections__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(allocations__student__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(allocations__student__guardianships__guardian=user).distinct()
+        return queryset.none()
+
+
+class HostelAllocationViewSet(RoleScopedModelViewSet):
+    queryset = HostelAllocation.objects.select_related("student", "room")
+    serializer_class = HostelAllocationSerializer
+    campus_filter_path = "student__campus_id"
+    read_roles = READ_ROLES
+    write_roles = ADMIN_ROLES
+    filterset_fields = ("student", "room", "is_active")
+    search_fields = ("student__first_name", "student__last_name", "room__hostel_name", "room__room_number", "bed_number")
+
+    def filter_queryset_by_role(self, queryset):
+        user = self.request.user
+        if user.role == UserRole.TEACHER:
+            return queryset.filter(
+                Q(student__section__class_teacher=user)
+                | Q(student__section__subject_allocations__teacher=user, student__section__subject_allocations__is_active=True)
+            ).distinct()
+        if user.role == UserRole.STUDENT:
+            return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
+        return queryset.none()
 
 
 class ApprovalRequestViewSet(RoleScopedModelViewSet):
@@ -670,13 +974,10 @@ class AssignedWorkViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(
-                status="published",
-                section__students__guardianships__guardian=user,
-            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(status="published", section__students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(status="published", section__students__guardianships__guardian=user).distinct()
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -702,10 +1003,10 @@ class LearningResourceViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(section__students__guardianships__guardian=user).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(section__students__user=user).distinct()
+        if user.role == UserRole.PARENT:
+            return queryset.filter(section__students__guardianships__guardian=user).distinct()
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -731,10 +1032,10 @@ class ResultRecordViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(student__section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(student__guardianships__guardian=user).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -760,10 +1061,10 @@ class AdmitCardViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(student__section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(student__guardianships__guardian=user).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -787,10 +1088,10 @@ class FeeAssignmentViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(student__section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(student__guardianships__guardian=user).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(student__guardianships__guardian=user)
         return queryset.none()
 
 
@@ -804,10 +1105,10 @@ class PaymentViewSet(RoleScopedModelViewSet):
         user = self.request.user
         if user.role == UserRole.TEACHER:
             return queryset.filter(fee_assignment__student__section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(fee_assignment__student__guardianships__guardian=user).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(fee_assignment__student__user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(fee_assignment__student__guardianships__guardian=user)
         return queryset.none()
 
     def perform_create(self, serializer):
@@ -864,11 +1165,14 @@ class DashboardSummaryView(APIView):
             campus_ids = self.admin_campus_ids(user)
             return queryset.filter(campus_id__in=campus_ids) if campus_ids else queryset.none()
         if user.role == UserRole.TEACHER:
-            return queryset.filter(section__class_teacher=user)
-        if user.role == UserRole.PARENT:
-            return queryset.filter(guardianships__guardian=user).distinct()
+            return queryset.filter(
+                Q(section__class_teacher=user)
+                | Q(section__subject_allocations__teacher=user, section__subject_allocations__is_active=True)
+            ).distinct()
         if user.role == UserRole.STUDENT:
             return queryset.filter(user=user)
+        if user.role == UserRole.PARENT:
+            return queryset.filter(guardianships__guardian=user)
         return queryset.none()
 
     def scoped_campus_ids(self, user, students):
@@ -877,7 +1181,11 @@ class DashboardSummaryView(APIView):
         if user.role == UserRole.ADMIN:
             return self.admin_campus_ids(user) or []
         if user.role == UserRole.TEACHER:
-            return list(ClassSection.objects.filter(class_teacher=user).values_list("campus_id", flat=True).distinct())
+            return list(
+                ClassSection.objects.filter(teacher_section_q(user))
+                .values_list("campus_id", flat=True)
+                .distinct()
+            )
         return list(students.values_list("campus_id", flat=True).distinct())
 
     def get(self, request):

@@ -22,9 +22,9 @@ class IsTeacherUserRole(HasRole):
     allowed_roles = (UserRole.TEACHER,)
 
 
-class IsParentUserRole(HasRole):
-    allowed_roles = (UserRole.PARENT,)
-
-
 class IsStudentUserRole(HasRole):
     allowed_roles = (UserRole.STUDENT,)
+
+
+class IsParentUserRole(HasRole):
+    allowed_roles = (UserRole.PARENT,)

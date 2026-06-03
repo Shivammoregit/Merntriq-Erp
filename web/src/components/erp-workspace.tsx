@@ -79,6 +79,7 @@ type WorkflowPhaseId = (typeof workflowPhases)[number]["id"];
 
 export function ERPWorkspace() {
   const [selectedPhaseId, setSelectedPhaseId] = useState<WorkflowPhaseId>(workflowPhases[0].id);
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   const selectedPhase = useMemo(
     () => workflowPhases.find((phase) => phase.id === selectedPhaseId) ?? workflowPhases[0],
@@ -86,6 +87,28 @@ export function ERPWorkspace() {
   );
 
   const SelectedPhaseIcon = iconMap[selectedPhase.icon as keyof typeof iconMap] ?? Sparkles;
+
+  function exportFlow() {
+    const content = JSON.stringify(
+      {
+        product: "MentriQ Campus360",
+        exported_at: new Date().toISOString(),
+        workflow_phases: workflowPhases,
+        flow_nodes: flowNodes,
+        modules: moduleCards,
+        role_workspaces: roleWorkspaces,
+      },
+      null,
+      2,
+    );
+    const blob = new Blob([content], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mentriq360-workflow-map.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <main className="min-h-screen overflow-x-hidden">
@@ -111,17 +134,31 @@ export function ERPWorkspace() {
             >
               <RefreshCcw size={16} aria-hidden="true" />
             </a>
-            <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-line/70 bg-white/80 text-muted shadow-sm transition hover:-translate-y-0.5 hover:text-ink"
-              aria-label="Notifications"
-              title="Notifications"
-              type="button"
-            >
-              <Bell size={16} aria-hidden="true" />
-            </button>
+            <div className="relative">
+              <button
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-line/70 bg-white/80 text-muted shadow-sm transition hover:-translate-y-0.5 hover:text-ink"
+                aria-label="Notifications"
+                title="Notifications"
+                type="button"
+                aria-expanded={notificationOpen}
+                onClick={() => setNotificationOpen((open) => !open)}
+              >
+                <Bell size={16} aria-hidden="true" />
+              </button>
+              {notificationOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-lg border border-line/70 bg-white p-3 text-sm shadow-xl">
+                  <p className="font-semibold text-ink">Blueprint status</p>
+                  <p className="mt-1 leading-6 text-muted">Workflow map is ready. Open the live dashboard to create records and operate modules.</p>
+                  <a href="/dashboard" className="mt-3 inline-flex rounded-md bg-ink px-3 py-2 text-xs font-semibold text-white">
+                    Open ERP
+                  </a>
+                </div>
+              )}
+            </div>
             <button
               className="inline-flex h-10 items-center gap-2 rounded-2xl bg-ink px-4 text-sm font-semibold text-white shadow-soft transition hover:-translate-y-0.5"
               type="button"
+              onClick={() => window.location.assign("/dashboard")}
             >
               <Plus size={16} aria-hidden="true" />
               <span className="hidden sm:inline">New Record</span>
@@ -171,6 +208,7 @@ export function ERPWorkspace() {
                   <button
                     className="inline-flex items-center gap-2 rounded-2xl border border-line/80 bg-white/80 px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:-translate-y-0.5"
                     type="button"
+                    onClick={exportFlow}
                   >
                     <Download size={16} aria-hidden="true" />
                     Export Flow

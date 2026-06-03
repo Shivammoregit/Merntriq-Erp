@@ -14,6 +14,7 @@ import {
   hasTokens,
   SESSION_EXPIRED_EVENT,
   storeTokens,
+  storeTenantCampusCode,
   type User,
   type UserRole,
 } from "./api";
@@ -35,7 +36,7 @@ function isIdleExpired() {
 interface AuthState {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string, captchaId: string, captchaAnswer: string) => Promise<void>;
+  login: (username: string, password: string, captchaId: string, captchaAnswer: string, campusCode?: string) => Promise<void>;
   logout: () => void;
   isRole: (...roles: UserRole[]) => boolean;
 }
@@ -68,9 +69,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (username: string, password: string, captchaId: string, captchaAnswer: string) => {
-    const data = await authApi.login(username, password, captchaId, captchaAnswer);
+  const login = useCallback(async (username: string, password: string, captchaId: string, captchaAnswer: string, campusCode = "") => {
+    const data = await authApi.login(username, password, captchaId, captchaAnswer, campusCode);
     storeTokens(data.access, data.refresh);
+    storeTenantCampusCode(campusCode);
     markActivity();
     setUser(data.user);
   }, []);
