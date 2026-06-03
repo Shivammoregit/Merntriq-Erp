@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ApiError, authApi, type CaptchaChallenge } from "@/lib/api";
-import { Spinner } from "@/components/ui/spinner";
+import { BrandLogo } from "@/components/brand-logo";
 
 const DEMO_PASSWORD = "Mentriq@123";
 
@@ -72,16 +72,16 @@ const DEMO_ACCOUNTS = [
     responsibility: "Manage north campus class attendance, assignments, resources, and results.",
   },
   {
-    role: "Parent",
-    username: "parent.rohan",
-    scope: "Family portal",
-    responsibility: "View linked learner attendance, fees, homework, results, and notices.",
-  },
-  {
     role: "Student",
     username: "student.anaya",
     scope: "Learner portal",
     responsibility: "View personal profile, attendance, work, LMS resources, fees, and admit cards.",
+  },
+  {
+    role: "Parent",
+    username: "parent.rohan",
+    scope: "Family portal",
+    responsibility: "View linked student attendance, homework, results, fee status, transport, hostel, and notices.",
   },
   {
     role: "Admission admin",
@@ -141,7 +141,7 @@ const DEMO_ACCOUNTS = [
     role: "Communication admin",
     username: "communication.admin",
     scope: "Communication",
-    responsibility: "Send SMS, email notices, announcement board updates, and parent messages.",
+    responsibility: "Send SMS, email notices, announcement board updates, and student or parent messages.",
   },
   {
     role: "Teacher",
@@ -275,60 +275,6 @@ const DEMO_ACCOUNTS = [
     scope: "North learner",
     responsibility: "Check attendance, documents, resources, and exam admit cards.",
   },
-  {
-    role: "Parent",
-    username: "parent.aarav",
-    scope: "Family portal",
-    responsibility: "Monitor learner attendance, fees, results, homework, and notices.",
-  },
-  {
-    role: "Parent",
-    username: "parent.diyaa",
-    scope: "Family portal",
-    responsibility: "Track student progress, school communication, assignments, and payments.",
-  },
-  {
-    role: "Parent",
-    username: "parent.kabir",
-    scope: "Family portal",
-    responsibility: "View fee receipts, attendance details, report cards, and announcements.",
-  },
-  {
-    role: "Parent",
-    username: "parent.isha",
-    scope: "Family portal",
-    responsibility: "Review assignments, school notices, academic updates, and results.",
-  },
-  {
-    role: "Parent",
-    username: "parent.mira",
-    scope: "North family",
-    responsibility: "Monitor linked learner attendance, fees, homework, and notices.",
-  },
-  {
-    role: "Parent",
-    username: "parent.arjun",
-    scope: "North family",
-    responsibility: "View attendance, homework, online payment history, and results.",
-  },
-  {
-    role: "Parent",
-    username: "parent.tara",
-    scope: "Family portal",
-    responsibility: "Check notices, fee visibility, academic performance, and homework.",
-  },
-  {
-    role: "Parent",
-    username: "parent.ved",
-    scope: "North family",
-    responsibility: "Use parent portal for notifications, attendance, and student progress.",
-  },
-  {
-    role: "Parent",
-    username: "parent.zara",
-    scope: "Family portal",
-    responsibility: "Access linked student communication, reports, fees, and notices.",
-  },
 ] satisfies DemoAccount[];
 
 const LOGIN_FEATURES = [
@@ -415,10 +361,7 @@ export function LoginPage() {
         <aside className="login-hero" aria-label="MentriQ360 ERP overview">
           <div className="relative z-10 flex h-full flex-col justify-between p-6 lg:p-8 xl:p-10">
             <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-lg font-bold leading-tight text-ink">MentriQ Campus360</p>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">School ERP Suite</p>
-              </div>
+              <BrandLogo size="lg" />
               <span className="rounded-md border border-line/70 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted shadow-sm">
                 Campus360
               </span>
@@ -432,7 +375,7 @@ export function LoginPage() {
                 One login for every campus workflow.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-7 text-muted">
-                Manage admissions, attendance, academics, fees, reports, staff, parents, and student services from one responsive ERP workspace.
+                Manage admissions, attendance, academics, fees, reports, staff, guardians, and student services from one responsive ERP workspace.
               </p>
             </div>
 
@@ -449,16 +392,21 @@ export function LoginPage() {
 
         <section className="login-panel-wrap">
           <div className="mb-5 flex items-center justify-between gap-4 lg:hidden">
-            <div className="min-w-0">
-              <p className="text-base font-bold leading-tight text-ink">MentriQ Campus360</p>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">School ERP Suite</p>
-            </div>
+            <BrandLogo compact className="shrink-0" />
             <span className="rounded-md border border-line/70 bg-white px-3 py-1 text-xs font-semibold text-muted">
               Campus ERP
             </span>
           </div>
 
           <form onSubmit={handleSubmit} className="login-card" noValidate>
+            <div className="mb-6 flex flex-col gap-4 border-b border-line/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <BrandLogo />
+              <p className="max-w-[13rem] text-left text-xs leading-5 text-muted sm:text-right">
+                MentriQ Campus360 School ERP
+                <span className="block font-semibold text-ink">Secure institutional access</span>
+              </p>
+            </div>
+
             <div className="mb-6 text-left">
               <p className="inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-strong">
                 Professional ERP login
@@ -518,7 +466,7 @@ export function LoginPage() {
 
               <div className="grid gap-3 sm:grid-cols-[1fr_8.5rem]">
                 <div>
-                  <span className="mb-1.5 block text-sm font-semibold text-ink">Captcha</span>
+                  <span className="mb-1.5 block text-sm font-semibold text-ink">Captcha number</span>
                   <div className="flex min-h-[3.75rem] items-center gap-2 rounded-md border border-line bg-slate-50 px-3 py-2">
                     <button
                       type="button"
@@ -527,31 +475,33 @@ export function LoginPage() {
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label="Refresh captcha"
                     >
-                      {captchaLoading ? <Spinner size={15} /> : <RefreshCcw size={17} />}
+                      <RefreshCcw size={17} />
                     </button>
-                    {captchaChallenge?.image ? (
+                    {captchaChallenge?.code ? (
                       <span
-                        role="img"
-                        aria-label="Captcha challenge"
-                        className="h-[3.1rem] w-full max-w-[11.5rem] select-none rounded-md border border-line/70 bg-white bg-cover bg-center"
-                        style={{ backgroundImage: `url(${captchaChallenge.image})` }}
-                      />
+                        aria-label={`Captcha number ${captchaChallenge.code}`}
+                        className="flex h-[3.1rem] w-full max-w-[11.5rem] select-none items-center justify-center rounded-md border border-line/70 bg-white px-4 font-mono text-2xl font-bold tracking-[0.28em] text-red-600 shadow-sm"
+                      >
+                        {captchaChallenge.code}
+                      </span>
                     ) : (
                       <span className="flex h-[3.1rem] flex-1 items-center justify-center rounded-md border border-dashed border-line/80 bg-white text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-                        Loading
+                        Captcha
                       </span>
                     )}
                   </div>
                 </div>
                 <label htmlFor="login-captcha" className="block">
-                  <span className="mb-1.5 block text-sm font-semibold text-ink">Enter</span>
+                  <span className="mb-1.5 block text-sm font-semibold text-ink">Enter number</span>
                   <input
                     id="login-captcha"
+                    type="text"
+                    inputMode="numeric"
                     value={captcha}
-                    onChange={(e) => setCaptcha(e.target.value.toUpperCase().replace(/\s/g, ""))}
-                    placeholder="Code"
+                    onChange={(e) => setCaptcha(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    placeholder="Number"
                     autoComplete="off"
-                    maxLength={8}
+                    maxLength={5}
                     className="w-full rounded-md border border-line bg-white px-3 py-3 text-sm text-ink outline-none placeholder:text-slate-400"
                   />
                 </label>
@@ -590,7 +540,6 @@ export function LoginPage() {
               disabled={busy || captchaLoading || !captchaChallenge || !username || !password || !captcha}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-md bg-red-600 py-3 text-base font-semibold text-white shadow-md transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {busy ? <Spinner size={16} /> : null}
               {busy ? "Signing in..." : "Sign in"}
               {!busy ? <ArrowRight size={17} /> : null}
             </button>

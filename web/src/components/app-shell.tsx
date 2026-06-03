@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   BarChart3,
   BookOpen,
+  BriefcaseBusiness,
   ClipboardCheck,
   GraduationCap,
   Layers3,
@@ -13,7 +14,6 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { BrandLogo } from "@/components/brand-logo";
 import { useAuth } from "@/lib/auth-context";
 import { LoginPage } from "@/components/auth/login-page";
 import { Topbar } from "@/components/layout/topbar";
@@ -25,12 +25,12 @@ import { InstitutionOverview } from "@/components/dashboard/institution-overview
 import { FeesPaymentsDashboard } from "@/components/fees/fees-payments-dashboard";
 import { Campus360Modules } from "@/components/modules/campus360-modules";
 import { ReportsDashboard } from "@/components/reports/reports-dashboard";
+import { SchoolOperationsPanel } from "@/components/operations/school-operations-panel";
 import { StudentDashboard } from "@/components/student/student-dashboard";
 import { SupportDock } from "@/components/support/support-dock";
-import { Spinner } from "@/components/ui/spinner";
 import type { User, UserCampusScope } from "@/lib/api";
 
-export type AppTab = "dashboard" | "modules" | "records" | "campus" | "attendance" | "academics" | "fees" | "reports" | "student";
+export type AppTab = "dashboard" | "modules" | "records" | "campus" | "attendance" | "operations" | "academics" | "fees" | "reports" | "student";
 type AppDomain = "command" | "suite" | "administration" | "governance" | "operations" | "academics" | "finance" | "learner";
 
 type NavItem = {
@@ -84,6 +84,14 @@ const APP_NAV: NavItem[] = [
     icon: ClipboardCheck,
   },
   {
+    id: "operations",
+    label: "Operations",
+    domain: "operations",
+    domainLabel: "Operations",
+    responsibility: "Staff, timetable, library, transport, and hostel",
+    icon: BriefcaseBusiness,
+  },
+  {
     id: "academics",
     label: "LMS",
     domain: "academics",
@@ -129,7 +137,7 @@ function canAccessTab(user: User, tab: AppTab) {
   if (tab === "modules") return true;
   if (user.role === "super_admin") return tab !== "student";
   if (user.role === "student" || user.role === "parent") return tab === "student";
-  if (user.role === "teacher") return ["dashboard", "attendance", "academics"].includes(tab);
+  if (user.role === "teacher") return ["dashboard", "attendance", "operations", "academics"].includes(tab);
   if (user.role !== "admin") return false;
 
   const isItAdmin = hasCampusRole(user, ["it_admin"]);
@@ -142,6 +150,7 @@ function canAccessTab(user: User, tab: AppTab) {
   if (tab === "records") return isItAdmin || isAcademicAdmin || canManageUsers;
   if (tab === "campus") return isItAdmin || canManageUsers || canConfigureAttendance;
   if (tab === "attendance") return isItAdmin || isAcademicAdmin || canConfigureAttendance;
+  if (tab === "operations") return true;
   if (tab === "academics") return isItAdmin || isAcademicAdmin;
   if (tab === "fees") return isItAdmin || isFinanceAdmin;
   if (tab === "reports") return isItAdmin || isFinanceAdmin;
@@ -161,7 +170,7 @@ function accessScopeLabel(user: User, navItems: NavItem[]) {
   if (user.role === "super_admin") return "You can manage the full institution and every campus.";
   if (user.role === "teacher") return "You can manage attendance, class work, resources, and results for your classes.";
   if (user.role === "student") return "You can view your attendance, work, results, fees, and admit cards.";
-  if (user.role === "parent") return "You can view linked student records, attendance, fees, and academic updates.";
+  if (user.role === "parent") return "You can view linked student attendance, work, results, fees, transport, hostel, and school notices.";
   const scopes = user.campuses?.map((campus) => `${campus.code} ${campus.role.replace("_", " ")}`) ?? [];
   return scopes.length
     ? `You can use ${navItems.length} page${navItems.length === 1 ? "" : "s"} for ${scopes.join(", ")}.`
@@ -172,17 +181,16 @@ function accessPolicyLabel(user: User) {
   if (user.role === "super_admin") return "Full access";
   if (user.role === "admin") return "Admin access";
   if (user.role === "teacher") return "Teacher access";
-  if (user.role === "parent") return "Parent view";
+  if (user.role === "parent") return "Family view";
   return "Student view";
 }
 
 function personalizeNavItem(item: NavItem, user: User): NavItem {
-  if (item.id !== "student") return item;
-  if (user.role === "parent") {
+  if (user.role === "parent" && item.id === "student") {
     return {
       ...item,
       label: "Family Portal",
-      responsibility: "Children, attendance, results",
+      responsibility: "Linked student records and updates",
     };
   }
   return item;
@@ -209,17 +217,7 @@ export function AppShell() {
   const campusName = user?.role === "super_admin" ? "All campuses" : primaryCampus?.name ?? "Campus not assigned";
   const accessMode = user?.role === "student" || user?.role === "parent" ? "Read-only" : "Operational";
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <BrandLogo />
-          <Spinner size={28} className="text-teal-600" />
-          <p className="text-sm text-muted">Loading Mentriq360...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   if (!user) return <LoginPage />;
 
@@ -313,10 +311,18 @@ export function AppShell() {
             }}
           />
         )}
-        {canOpen("modules") && <Campus360Modules />}
+        {canOpen("modules") && (
+          <Campus360Modules
+            allowedTabs={allowedTabIds}
+            onNavigate={(tab) => {
+              if (canAccessTab(user, tab)) setActiveTab(tab);
+            }}
+          />
+        )}
         {canOpen("records") && <AdminDashboard />}
         {canOpen("campus") && <CampusControlPanel />}
         {canOpen("attendance") && <AttendancePanel />}
+        {canOpen("operations") && <SchoolOperationsPanel />}
         {canOpen("academics") && <AcademicManagementPanel />}
         {canOpen("fees") && <FeesPaymentsDashboard />}
         {canOpen("reports") && <ReportsDashboard />}

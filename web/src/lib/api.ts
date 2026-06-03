@@ -3,13 +3,38 @@
  * All backend calls go through this module so token management is centralised.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
-const AUTH_BASE = process.env.NEXT_PUBLIC_API_BASE_URL
-  ? process.env.NEXT_PUBLIC_API_BASE_URL.replace("/api/v1", "/api/v1/auth")
-  : "http://localhost:8000/api/v1/auth";
+const CONFIGURED_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const configuredTimeout = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? "60000");
 const REQUEST_TIMEOUT_MS = Number.isFinite(configuredTimeout) ? Math.max(configuredTimeout, 60000) : 60000;
 export const SESSION_EXPIRED_EVENT = "mentriq360-session-expired";
+const TENANT_CAMPUS_CODE_KEY = "erp_campus_code";
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function getApiBase() {
+  const configuredBase = trimTrailingSlash(CONFIGURED_API_BASE);
+  if (typeof window === "undefined") return configuredBase;
+
+  try {
+    const apiUrl = new URL(configuredBase);
+    const pageHost = window.location.hostname;
+
+    if (pageHost && !LOOPBACK_HOSTS.has(pageHost) && LOOPBACK_HOSTS.has(apiUrl.hostname)) {
+      apiUrl.hostname = pageHost;
+    }
+
+    return trimTrailingSlash(apiUrl.toString());
+  } catch {
+    return configuredBase;
+  }
+}
+
+function getAuthBase() {
+  return `${getApiBase()}/auth`;
+}
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 function getAccess() {
@@ -27,9 +52,21 @@ export function storeTokens(access: string, refresh: string) {
 export function clearTokens() {
   localStorage.removeItem("erp_access");
   localStorage.removeItem("erp_refresh");
+  localStorage.removeItem(TENANT_CAMPUS_CODE_KEY);
 }
 export function hasTokens() {
   return !!getAccess();
+}
+
+function getTenantCampusCode() {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(TENANT_CAMPUS_CODE_KEY) ?? "";
+}
+
+export function storeTenantCampusCode(campusCode: string) {
+  const cleaned = campusCode.trim().toUpperCase();
+  if (cleaned) localStorage.setItem(TENANT_CAMPUS_CODE_KEY, cleaned);
+  else localStorage.removeItem(TENANT_CAMPUS_CODE_KEY);
 }
 
 function notifySessionExpired() {
@@ -44,7 +81,7 @@ async function refreshAccessToken(): Promise<string | null> {
   const refresh = getRefresh();
   if (!refresh) return null;
   try {
-    const res = await fetch(`${AUTH_BASE}/token/refresh/`, {
+    const res = await fetch(`${getAuthBase()}/token/refresh/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh }),
@@ -70,8 +107,10 @@ async function apiFetch<T>(
   };
   const token = getAccess();
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  const campusCode = getTenantCampusCode();
+  if (campusCode && !headers["X-Campus-Code"]) headers["X-Campus-Code"] = campusCode;
 
-  const url = path.startsWith("http") ? path : `${BASE}${path}`;
+  const url = path.startsWith("http") ? path : `${getApiBase()}${path}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
@@ -85,7 +124,7 @@ async function apiFetch<T>(
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new ApiError(0, "Request timed out. Please check the network and try again.");
     }
-    throw new ApiError(0, "Network connection failed. Please check the server or internet connection.");
+    throw new ApiError(0, "Cannot reach the Mentriq360 API. Make sure the backend server is running and reachable from this device.");
   } finally {
     clearTimeout(timeout);
   }
@@ -127,7 +166,7 @@ export class ApiError extends Error {
 }
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
-export type UserRole = "super_admin" | "admin" | "teacher" | "parent" | "student";
+export type UserRole = "super_admin" | "admin" | "teacher" | "student" | "parent";
 
 export interface User {
   id: number;
@@ -154,6 +193,8 @@ export interface UserCampusScope {
   id: number;
   name: string;
   code: string;
+  logo_url?: string;
+  logo_alt_text?: string;
   role: string;
   is_primary: boolean;
   can_manage_users?: boolean;
@@ -168,7 +209,7 @@ export interface LoginResponse {
 
 export interface CaptchaChallenge {
   challenge_id: string;
-  image: string;
+  code: string;
   expires_in: number;
   expires_at: string;
 }
@@ -178,6 +219,10 @@ export interface Campus {
   name: string;
   code: string;
   address: string;
+  logo_url?: string;
+  logo_alt_text?: string;
+  database_alias?: string;
+  database_name?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -265,6 +310,21 @@ export interface ClassSection {
   updated_at?: string;
 }
 
+export interface TeacherSubjectAllocation {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  section: number;
+  section_label?: string;
+  teacher: number;
+  teacher_name?: string;
+  subject: string;
+  weekly_periods: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type StudentStatus = "active" | "inactive" | "alumni";
 
 export interface Student {
@@ -302,6 +362,7 @@ export interface AttendanceRecord {
   section: number;
   section_label?: string;
   date: string;
+  subject: string;
   status: AttendanceStatus;
   marked_by: number | null;
   capture_method: AttendanceCaptureMethod;
@@ -334,6 +395,164 @@ export interface StaffAttendanceRecord {
   source_reference: string;
   confidence_score: string | null;
   notes: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type StaffEmploymentType = "full_time" | "part_time" | "contract";
+export type StaffProfileStatus = "active" | "inactive" | "exited";
+
+export interface StaffProfile {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  user: number;
+  user_name?: string;
+  user_role?: UserRole;
+  employee_code: string;
+  designation: string;
+  department: string;
+  employment_type: StaffEmploymentType;
+  joining_date: string;
+  qualification: string;
+  emergency_contact: string;
+  status: StaffProfileStatus;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface TimetableSlot {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  section: number;
+  section_label?: string;
+  teacher: number | null;
+  teacher_name?: string;
+  subject: string;
+  day_of_week: Weekday;
+  day_name?: string;
+  start_time: string;
+  end_time: string;
+  room: string;
+  effective_from: string;
+  effective_to: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type LibraryBookStatus = "active" | "inactive" | "lost";
+export type LibraryLoanStatus = "issued" | "returned" | "overdue";
+
+export interface LibraryBook {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  accession_number: string;
+  title: string;
+  author: string;
+  isbn: string;
+  category: string;
+  total_copies: number;
+  available_copies: number;
+  shelf_location: string;
+  status: LibraryBookStatus;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LibraryLoan {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  book: number;
+  book_title?: string;
+  student: number | null;
+  staff_user: number | null;
+  borrower_name?: string;
+  issued_on: string;
+  due_on: string;
+  returned_on: string | null;
+  fine_amount: string;
+  status: LibraryLoanStatus;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TransportRoute {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  name: string;
+  route_code: string;
+  start_point: string;
+  end_point: string;
+  stops: string[];
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TransportVehicle {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  route: number | null;
+  route_name?: string;
+  vehicle_number: string;
+  driver_name: string;
+  driver_phone: string;
+  capacity: number;
+  gps_device_id: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StudentTransportAssignment {
+  id: number;
+  student: number;
+  student_name?: string;
+  route: number;
+  route_name?: string;
+  vehicle: number | null;
+  vehicle_number?: string;
+  pickup_stop: string;
+  drop_stop: string;
+  start_date: string;
+  end_date: string | null;
+  fee_amount: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface HostelRoom {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  hostel_name: string;
+  room_number: string;
+  floor: string;
+  capacity: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface HostelAllocation {
+  id: number;
+  student: number;
+  student_name?: string;
+  room: number;
+  room_label?: string;
+  bed_number: string;
+  start_date: string;
+  end_date: string | null;
+  fee_amount: string;
+  is_active: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -574,34 +793,35 @@ export interface PagedResponse<T> {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
-  captcha: () => apiFetch<CaptchaChallenge>(`${AUTH_BASE}/captcha/`),
+  captcha: () => apiFetch<CaptchaChallenge>(`${getAuthBase()}/captcha/`),
 
-  login: (username: string, password: string, captcha_id: string, captcha_answer: string) =>
-    apiFetch<LoginResponse>(`${AUTH_BASE}/token/`, {
+  login: (username: string, password: string, captcha_id: string, captcha_answer: string, campusCode = "") =>
+    apiFetch<LoginResponse>(`${getAuthBase()}/token/`, {
       method: "POST",
+      headers: campusCode.trim() ? { "X-Campus-Code": campusCode.trim().toUpperCase() } : undefined,
       body: JSON.stringify({ username, password, captcha_id, captcha_answer }),
     }),
 
-  me: () => apiFetch<User>(`${AUTH_BASE}/me/`),
+  me: () => apiFetch<User>(`${getAuthBase()}/me/`),
 };
 
 export const userApi = {
   list: (params?: Record<string, string>) => {
     const q = params ? "?" + new URLSearchParams(params).toString() : "";
-    return apiFetch<ERPUser[]>(`${AUTH_BASE}/users/${q}`);
+    return apiFetch<ERPUser[]>(`${getAuthBase()}/users/${q}`);
   },
   create: (data: Partial<ERPUser> & { username: string; password?: string; role: UserRole; campus_ids?: number[] }) =>
-    apiFetch<ERPUser>(`${AUTH_BASE}/users/`, { method: "POST", body: JSON.stringify(data) }),
+    apiFetch<ERPUser>(`${getAuthBase()}/users/`, { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: Partial<ERPUser> & { password?: string; campus_ids?: number[] }) =>
-    apiFetch<ERPUser>(`${AUTH_BASE}/users/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
-  remove: (id: number) => apiFetch<void>(`${AUTH_BASE}/users/${id}/`, { method: "DELETE" }),
+    apiFetch<ERPUser>(`${getAuthBase()}/users/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`${getAuthBase()}/users/${id}/`, { method: "DELETE" }),
 };
 
 // ─── Campus ──────────────────────────────────────────────────────────────────
 export const campusApi = {
   list: () => apiFetch<Campus[]>("/campuses/"),
   get: (id: number) => apiFetch<Campus>(`/campuses/${id}/`),
-  create: (data: Omit<Campus, "id">) =>
+  create: (data: Pick<Campus, "name" | "code"> & Partial<Pick<Campus, "address" | "logo_url" | "logo_alt_text" | "database_alias" | "database_name">>) =>
     apiFetch<Campus>("/campuses/", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Campus>) =>
     apiFetch<Campus>(`/campuses/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -661,7 +881,10 @@ export const sessionApi = {
 
 // ─── Sections ────────────────────────────────────────────────────────────────
 export const sectionApi = {
-  list: () => apiFetch<ClassSection[]>("/sections/"),
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<ClassSection[]>(`/sections/${q}`);
+  },
   get: (id: number) => apiFetch<ClassSection>(`/sections/${id}/`),
   create: (data: Omit<ClassSection, "id">) =>
     apiFetch<ClassSection>("/sections/", { method: "POST", body: JSON.stringify(data) }),
@@ -671,6 +894,24 @@ export const sectionApi = {
 };
 
 // ─── Students ────────────────────────────────────────────────────────────────
+export const teacherSubjectAllocationApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<TeacherSubjectAllocation[]>(`/teacher-subject-allocations/${q}`);
+  },
+  create: (data: Omit<TeacherSubjectAllocation, "id" | "campus_name" | "section_label" | "teacher_name">) =>
+    apiFetch<TeacherSubjectAllocation>("/teacher-subject-allocations/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: number, data: Partial<TeacherSubjectAllocation>) =>
+    apiFetch<TeacherSubjectAllocation>(`/teacher-subject-allocations/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  remove: (id: number) => apiFetch<void>(`/teacher-subject-allocations/${id}/`, { method: "DELETE" }),
+};
+
 export const studentApi = {
   list: (params?: Record<string, string>) => {
     const q = params ? "?" + new URLSearchParams(params).toString() : "";
@@ -694,6 +935,7 @@ export const attendanceApi = {
     student: number;
     section: number;
     date: string;
+    subject?: string;
     status: AttendanceStatus;
     capture_method?: AttendanceCaptureMethod;
     device?: number | null;
@@ -713,6 +955,7 @@ export const attendanceApi = {
     student: number;
     section: number;
     date: string;
+    subject?: string;
     status: AttendanceStatus;
     capture_method?: AttendanceCaptureMethod;
     device?: number | null;
@@ -723,6 +966,7 @@ export const attendanceApi = {
   bulkUpsert: (data: {
     section: number;
     date: string;
+    subject?: string;
     capture_method?: AttendanceCaptureMethod;
     device?: number | null;
     source_reference?: string;
@@ -745,6 +989,114 @@ export const staffAttendanceApi = {
   update: (id: number, data: Partial<StaffAttendanceRecord>) =>
     apiFetch<StaffAttendanceRecord>(`/staff-attendance-records/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
   remove: (id: number) => apiFetch<void>(`/staff-attendance-records/${id}/`, { method: "DELETE" }),
+};
+
+export const staffProfileApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<StaffProfile[]>(`/staff-profiles/${q}`);
+  },
+  create: (data: Omit<StaffProfile, "id" | "campus_name" | "user_name" | "user_role" | "created_at" | "updated_at">) =>
+    apiFetch<StaffProfile>("/staff-profiles/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<StaffProfile>) =>
+    apiFetch<StaffProfile>(`/staff-profiles/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/staff-profiles/${id}/`, { method: "DELETE" }),
+};
+
+export const timetableApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<TimetableSlot[]>(`/timetable-slots/${q}`);
+  },
+  create: (data: Omit<TimetableSlot, "id" | "campus_name" | "section_label" | "teacher_name" | "day_name" | "created_at" | "updated_at">) =>
+    apiFetch<TimetableSlot>("/timetable-slots/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<TimetableSlot>) =>
+    apiFetch<TimetableSlot>(`/timetable-slots/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/timetable-slots/${id}/`, { method: "DELETE" }),
+};
+
+export const libraryBookApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<LibraryBook[]>(`/library-books/${q}`);
+  },
+  create: (data: Omit<LibraryBook, "id" | "campus_name" | "created_at" | "updated_at">) =>
+    apiFetch<LibraryBook>("/library-books/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<LibraryBook>) =>
+    apiFetch<LibraryBook>(`/library-books/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/library-books/${id}/`, { method: "DELETE" }),
+};
+
+export const libraryLoanApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<LibraryLoan[]>(`/library-loans/${q}`);
+  },
+  create: (data: Omit<LibraryLoan, "id" | "campus_name" | "book_title" | "borrower_name" | "created_at" | "updated_at">) =>
+    apiFetch<LibraryLoan>("/library-loans/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<LibraryLoan>) =>
+    apiFetch<LibraryLoan>(`/library-loans/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/library-loans/${id}/`, { method: "DELETE" }),
+};
+
+export const transportRouteApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<TransportRoute[]>(`/transport-routes/${q}`);
+  },
+  create: (data: Omit<TransportRoute, "id" | "campus_name" | "created_at" | "updated_at">) =>
+    apiFetch<TransportRoute>("/transport-routes/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<TransportRoute>) =>
+    apiFetch<TransportRoute>(`/transport-routes/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/transport-routes/${id}/`, { method: "DELETE" }),
+};
+
+export const transportVehicleApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<TransportVehicle[]>(`/transport-vehicles/${q}`);
+  },
+  create: (data: Omit<TransportVehicle, "id" | "campus_name" | "route_name" | "created_at" | "updated_at">) =>
+    apiFetch<TransportVehicle>("/transport-vehicles/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<TransportVehicle>) =>
+    apiFetch<TransportVehicle>(`/transport-vehicles/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/transport-vehicles/${id}/`, { method: "DELETE" }),
+};
+
+export const studentTransportApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<StudentTransportAssignment[]>(`/student-transport-assignments/${q}`);
+  },
+  create: (data: Omit<StudentTransportAssignment, "id" | "student_name" | "route_name" | "vehicle_number" | "created_at" | "updated_at">) =>
+    apiFetch<StudentTransportAssignment>("/student-transport-assignments/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<StudentTransportAssignment>) =>
+    apiFetch<StudentTransportAssignment>(`/student-transport-assignments/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/student-transport-assignments/${id}/`, { method: "DELETE" }),
+};
+
+export const hostelRoomApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<HostelRoom[]>(`/hostel-rooms/${q}`);
+  },
+  create: (data: Omit<HostelRoom, "id" | "campus_name" | "created_at" | "updated_at">) =>
+    apiFetch<HostelRoom>("/hostel-rooms/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<HostelRoom>) =>
+    apiFetch<HostelRoom>(`/hostel-rooms/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/hostel-rooms/${id}/`, { method: "DELETE" }),
+};
+
+export const hostelAllocationApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<HostelAllocation[]>(`/hostel-allocations/${q}`);
+  },
+  create: (data: Omit<HostelAllocation, "id" | "student_name" | "room_label" | "created_at" | "updated_at">) =>
+    apiFetch<HostelAllocation>("/hostel-allocations/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<HostelAllocation>) =>
+    apiFetch<HostelAllocation>(`/hostel-allocations/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: number) => apiFetch<void>(`/hostel-allocations/${id}/`, { method: "DELETE" }),
 };
 
 export const assignedWorkApi = {
