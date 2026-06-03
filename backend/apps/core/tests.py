@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.urls import reverse
-from django.test import SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -30,6 +30,7 @@ from apps.core.models import (
     TeacherSubjectAllocation,
 )
 from apps.core.db_router import CampusTenantRouter
+from apps.core.middleware import CampusTenantMiddleware
 from apps.core.tenant import activate_campus_tenant, normalize_campus_database_alias, reset_campus_tenant
 
 
@@ -56,6 +57,30 @@ class CampusTenantRoutingTests(SimpleTestCase):
             self.assertIsNone(router.db_for_read(Student))
         finally:
             settings.DATABASES.pop("campus_m360_main", None)
+
+
+class CampusTenantMiddlewareTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = CampusTenantMiddleware(lambda request: None)
+
+    @override_settings(TENANT_DOMAIN_SUFFIX="schools.example.com")
+    def test_derives_campus_code_from_configured_subdomain(self):
+        request = self.factory.get("/", HTTP_HOST="north.schools.example.com")
+
+        self.assertEqual(self.middleware._campus_code_from_request(request), "NORTH")
+
+    @override_settings(TENANT_DOMAIN_SUFFIX="schools.example.com")
+    def test_header_takes_precedence_over_subdomain(self):
+        request = self.factory.get("/", HTTP_HOST="north.schools.example.com", HTTP_X_CAMPUS_CODE="main")
+
+        self.assertEqual(self.middleware._campus_code_from_request(request), "MAIN")
+
+    @override_settings(TENANT_DOMAIN_SUFFIX="")
+    def test_host_detection_is_disabled_without_suffix(self):
+        request = self.factory.get("/", HTTP_HOST="north.schools.example.com")
+
+        self.assertEqual(self.middleware._campus_code_from_request(request), "")
 
 
 class ERPRoleFlowTests(APITestCase):

@@ -10,7 +10,7 @@ Base URL: `/api/v1/`
 - `GET/POST /auth/users/` - admin user management
 - `GET/PATCH/DELETE /auth/users/{id}/` - admin user detail
 
-For campus-isolated databases, send `X-Campus-Code: {campus_code}` with login and subsequent API requests. The code must be configured in `CAMPUS_DATABASE_URLS` or the campus catalog `database_alias`.
+For campus-isolated databases, send `X-Campus-Code: {campus_code}` with login and subsequent API requests. The code must be configured in `CAMPUS_DATABASE_URLS` or the campus catalog `database_alias`. Production tenant subdomains can also be enabled with `DJANGO_TENANT_DOMAIN_SUFFIX` and `NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX`.
 
 ## Academic Setup
 

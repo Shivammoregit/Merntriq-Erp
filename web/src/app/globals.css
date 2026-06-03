@@ -41,12 +41,7 @@ body {
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
-  background:
-    linear-gradient(rgba(40, 87, 216, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 87, 216, 0.035) 1px, transparent 1px),
-    linear-gradient(180deg, #f9fbff 0%, #f3f6fb 48%, #eef3f9 100%);
-  background-size: 36px 36px, 36px 36px, auto;
-  background-repeat: no-repeat;
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f6fb 52%, #eef3f9 100%);
   color: var(--ink);
   font-family: var(--font-body), sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -139,12 +134,11 @@ a {
 }
 
 .brand-lockup-animated .brand-lockup-mark::before {
-  animation: brand-orbit 8600ms linear infinite;
-  opacity: 1;
+  opacity: 0;
 }
 
 .brand-lockup-animated .brand-lockup-mark img {
-  animation: brand-mark-breathe 4600ms ease-in-out infinite;
+  animation: none;
 }
 
 .brand-lockup-animated .brand-lockup-wordmark::after {
@@ -156,7 +150,8 @@ a {
   border-radius: 999px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
   transform: skewX(-18deg);
-  animation: brand-shine 6400ms ease-in-out infinite;
+  animation: none;
+  opacity: 0;
   pointer-events: none;
 }
 
@@ -661,11 +656,7 @@ tbody tr:hover {
   min-height: 100vh;
   min-height: 100dvh;
   overflow-x: hidden;
-  background:
-    linear-gradient(rgba(40, 87, 216, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 87, 216, 0.04) 1px, transparent 1px),
-    linear-gradient(135deg, #ffffff 0%, #f8fbff 58%, #eef3fa 100%);
-  background-size: 34px 34px, 34px 34px, auto;
+  background: linear-gradient(135deg, #ffffff 0%, #f7f9fd 56%, #edf2f8 100%);
   padding: clamp(0.75rem, 2vw, 1.5rem);
 }
 
@@ -685,10 +676,8 @@ tbody tr:hover {
   border-radius: 8px;
   border: 1px solid rgba(226, 232, 240, 0.96);
   background:
-    linear-gradient(rgba(49, 87, 213, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(49, 87, 213, 0.055) 1px, transparent 1px),
-    linear-gradient(180deg, #ffffff 0%, #fcfdff 62%, #f8faff 100%);
-  background-size: 34px 34px, 34px 34px, auto;
+    linear-gradient(90deg, rgba(40, 87, 216, 0.055), transparent 38%),
+    linear-gradient(180deg, #ffffff 0%, #fcfdff 62%, #f6f8fc 100%);
   box-shadow: 0 8px 26px rgba(19, 27, 46, 0.08);
   isolation: isolate;
 }
@@ -734,6 +723,51 @@ tbody tr:hover {
   background: #ffffff;
   padding: clamp(1.1rem, 3vw, 1.75rem);
   box-shadow: 0 16px 44px rgba(19, 27, 46, 0.11);
+}
+
+.login-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.login-status-pill {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: #f8fafc;
+  padding: 0.4rem 0.65rem;
+  color: var(--muted-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.login-status-pill--online {
+  border-color: rgba(6, 118, 71, 0.18);
+  background: #ecfdf3;
+  color: var(--success);
+}
+
+.login-status-pill--checking {
+  border-color: rgba(37, 99, 235, 0.18);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.login-status-pill--offline {
+  border-color: rgba(180, 35, 24, 0.2);
+  background: #fff1f0;
+  color: var(--danger);
+}
+
+.login-status-pill--neutral {
+  border-color: rgba(216, 222, 233, 0.95);
+  background: #ffffff;
+  color: var(--muted-strong);
 }
 
 @media (min-width: 1024px) {

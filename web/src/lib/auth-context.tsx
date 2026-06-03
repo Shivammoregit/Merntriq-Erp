@@ -11,6 +11,7 @@ import {
 import {
   authApi,
   clearTokens,
+  getActiveTenantCampusCode,
   hasTokens,
   SESSION_EXPIRED_EVENT,
   storeTokens,
@@ -77,8 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string, captchaId: string, captchaAnswer: string, campusCode = "") => {
     const data = await authApi.login(username, password, captchaId, captchaAnswer, campusCode);
+    const activeTenant = campusCode || getActiveTenantCampusCode();
     storeTokens(data.access, data.refresh);
-    storeTenantCampusCode(campusCode);
+    storeTenantCampusCode(activeTenant);
     markActivity();
     setUser(data.user);
   }, []);

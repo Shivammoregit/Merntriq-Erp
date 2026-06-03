@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Mentriq360 ERP",
     description: "Role-based campus ERP for admissions, attendance, academics, fees, operations, and reporting.",
-    images: ["/logo.png"],
+    images: ["/icon-512.png"],
   },
   appleWebApp: {
     capable: true,
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#3157d5"
+  themeColor: "#2857d8"
 };
 
 export default function RootLayout({

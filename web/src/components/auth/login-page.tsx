@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  Building2,
+  CheckCircle2,
   Eye,
   EyeOff,
   KeyRound,
@@ -14,9 +16,10 @@ import {
   Smartphone,
   User,
   UsersRound,
+  WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, authApi, type CaptchaChallenge } from "@/lib/api";
+import { ApiError, authApi, getActiveTenantCampusCode, type CaptchaChallenge } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
 
 const DEMO_PASSWORD = "Mentriq@123";
@@ -294,6 +297,7 @@ export function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const [accountSearch, setAccountSearch] = useState("");
+  const [tenantCode, setTenantCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const filteredDemoAccounts = useMemo(() => {
@@ -306,6 +310,13 @@ export function LoginPage() {
         .includes(term),
     );
   }, [accountSearch]);
+  const connectionStatus = useMemo(() => {
+    if (captchaLoading) return { label: "Checking API", tone: "checking", Icon: RefreshCcw };
+    if (captchaChallenge) return { label: "API connected", tone: "online", Icon: CheckCircle2 };
+    return { label: "API offline", tone: "offline", Icon: WifiOff };
+  }, [captchaChallenge, captchaLoading]);
+  const ConnectionIcon = connectionStatus.Icon;
+  const tenantLabel = tenantCode ? `Tenant ${tenantCode}` : "Central tenant";
 
   const loadCaptcha = useCallback(async (clearError = true) => {
     setCaptchaLoading(true);
@@ -323,6 +334,7 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
+    setTenantCode(getActiveTenantCampusCode());
     void loadCaptcha(false);
   }, [loadCaptcha]);
 
@@ -408,6 +420,16 @@ export function LoginPage() {
             </div>
 
             <div className="mb-6 text-left">
+              <div className="login-status-strip mb-4" aria-label="Connection and tenant status">
+                <span className={`login-status-pill login-status-pill--${connectionStatus.tone}`}>
+                  <ConnectionIcon size={14} className={captchaLoading ? "animate-spin" : ""} />
+                  {connectionStatus.label}
+                </span>
+                <span className="login-status-pill login-status-pill--neutral">
+                  <Building2 size={14} />
+                  {tenantLabel}
+                </span>
+              </div>
               <p className="inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-strong">
                 Professional ERP login
               </p>

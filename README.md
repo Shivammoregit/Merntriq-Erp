@@ -88,6 +88,15 @@ Set-Location backend
 
 Campus database routing is controlled by the stored tenant campus context and the `X-Campus-Code` API header. The login form uses the default database and no longer asks users for a campus code.
 
+For tenant subdomains, configure the same suffix on the backend and frontend. For example, with `north.schools.example.com`, set:
+
+```dotenv
+DJANGO_TENANT_DOMAIN_SUFFIX=schools.example.com
+NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX=schools.example.com
+```
+
+You can also set `NEXT_PUBLIC_DEFAULT_TENANT_CODE` for a single-campus deployment. Leave it empty for central/demo deployments.
+
 For production web deployments, set `NEXT_PUBLIC_API_BASE_URL` to the deployed Django API URL, for example:
 
 ```dotenv

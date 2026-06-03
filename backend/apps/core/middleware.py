@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from django.apps import apps
 from django.conf import settings
 from django.http import JsonResponse
@@ -11,13 +13,18 @@ from .tenant import (
 )
 
 
+RESERVED_TENANT_HOSTS = {"admin", "app", "erp", "login", "portal", "www"}
+
+
 class CampusTenantMiddleware:
     """
     Activates a configured campus database for the request.
 
-    Clients select the tenant with X-Campus-Code. The code resolves first through
-    CAMPUS_DATABASE_ALIASES from settings, then through the default Campus catalog
-    database_alias field, then through the normalized campus_<code> alias.
+    Clients select the tenant with X-Campus-Code, the campus_code query param,
+    or an enabled subdomain suffix such as north.schools.example.com. The code
+    resolves first through CAMPUS_DATABASE_ALIASES from settings, then through
+    the default Campus catalog database_alias field, then through the normalized
+    campus_<code> alias.
     """
 
     def __init__(self, get_response):
@@ -56,7 +63,30 @@ class CampusTenantMiddleware:
     def _campus_code_from_request(self, request) -> str:
         header_name = getattr(settings, "TENANT_CAMPUS_HEADER", "HTTP_X_CAMPUS_CODE")
         value = request.META.get(header_name) or request.GET.get("campus_code", "")
-        return value.strip().upper()
+        campus_code = self._normalize_campus_code(value)
+        if campus_code:
+            return campus_code
+        return self._campus_code_from_host(request)
+
+    def _campus_code_from_host(self, request) -> str:
+        suffix = getattr(settings, "TENANT_DOMAIN_SUFFIX", "")
+        if not suffix:
+            return ""
+
+        forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST") if getattr(settings, "USE_X_FORWARDED_HOST", False) else ""
+        raw_host = forwarded_host or request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME", "")
+        host = raw_host.split(",", 1)[0].split(":", 1)[0].strip().lower().rstrip(".")
+        suffix = suffix.strip().lower().strip(".")
+        if not host.endswith(f".{suffix}"):
+            return ""
+
+        tenant_host = host[: -(len(suffix) + 1)].split(".")[-1]
+        if not tenant_host or tenant_host in RESERVED_TENANT_HOSTS:
+            return ""
+        return self._normalize_campus_code(tenant_host)
+
+    def _normalize_campus_code(self, value: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_-]+", "", (value or "").strip()).upper()
 
     def _resolve_database_alias(self, campus_code: str) -> str:
         configured_alias = getattr(settings, "CAMPUS_DATABASE_ALIASES", {}).get(campus_code)

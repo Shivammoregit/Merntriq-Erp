@@ -9,6 +9,9 @@ const configuredTimeout = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? "6000
 const REQUEST_TIMEOUT_MS = Number.isFinite(configuredTimeout) ? Math.max(configuredTimeout, 60000) : 60000;
 export const SESSION_EXPIRED_EVENT = "mentriq360-session-expired";
 const TENANT_CAMPUS_CODE_KEY = "erp_campus_code";
+const DEFAULT_TENANT_CAMPUS_CODE = process.env.NEXT_PUBLIC_DEFAULT_TENANT_CODE ?? "";
+const TENANT_DOMAIN_SUFFIX = process.env.NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX ?? "";
+const RESERVED_TENANT_HOSTS = new Set(["admin", "app", "erp", "login", "portal", "www"]);
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
 function trimTrailingSlash(value: string) {
@@ -67,13 +70,47 @@ export function hasTokens() {
   return !!getAccess();
 }
 
-function getTenantCampusCode() {
+function normalizeCampusCode(value: string) {
+  return value.trim().replace(/[^a-zA-Z0-9_-]+/g, "").toUpperCase();
+}
+
+function tenantCodeFromHost(hostname: string) {
+  const suffix = TENANT_DOMAIN_SUFFIX.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+  if (!suffix) return "";
+
+  const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!host || LOOPBACK_HOSTS.has(host) || !host.endsWith(`.${suffix}`)) return "";
+
+  const tenantHost = host.slice(0, -(suffix.length + 1)).split(".").filter(Boolean).pop() ?? "";
+  if (!tenantHost || RESERVED_TENANT_HOSTS.has(tenantHost)) return "";
+  return normalizeCampusCode(tenantHost);
+}
+
+function tenantCodeFromUrl() {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem(TENANT_CAMPUS_CODE_KEY) ?? "";
+  const params = new URLSearchParams(window.location.search);
+  return normalizeCampusCode(params.get("campus_code") ?? params.get("campus") ?? params.get("tenant") ?? "");
+}
+
+export function getActiveTenantCampusCode() {
+  const fallback = normalizeCampusCode(DEFAULT_TENANT_CAMPUS_CODE);
+  if (typeof window === "undefined") return fallback;
+
+  const stored = normalizeCampusCode(localStorage.getItem(TENANT_CAMPUS_CODE_KEY) ?? "");
+  if (stored) return stored;
+
+  const urlTenant = tenantCodeFromUrl();
+  if (urlTenant) return urlTenant;
+
+  return tenantCodeFromHost(window.location.hostname) || fallback;
+}
+
+function getTenantCampusCode() {
+  return getActiveTenantCampusCode();
 }
 
 export function storeTenantCampusCode(campusCode: string) {
-  const cleaned = campusCode.trim().toUpperCase();
+  const cleaned = normalizeCampusCode(campusCode);
   if (cleaned) localStorage.setItem(TENANT_CAMPUS_CODE_KEY, cleaned);
   else localStorage.removeItem(TENANT_CAMPUS_CODE_KEY);
 }

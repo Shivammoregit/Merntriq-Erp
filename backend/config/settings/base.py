@@ -20,6 +20,7 @@ env = environ.Env(
     DJANGO_THROTTLE_HARDWARE_CAPTURE_RATE=(str, "1200/minute"),
     DJANGO_CACHE_URL=(str, ""),
     CAMPUS_DATABASE_URLS=(str, ""),
+    DJANGO_TENANT_DOMAIN_SUFFIX=(str, ""),
     DJANGO_TENANT_ROUTED_APPS=(str, "admin,auth,contenttypes,sessions,token_blacklist,accounts,core"),
 )
 
@@ -127,6 +128,7 @@ TENANT_ROUTED_APPS = tuple(
     if item.strip()
 )
 TENANT_CAMPUS_HEADER = "HTTP_X_CAMPUS_CODE"
+TENANT_DOMAIN_SUFFIX = env("DJANGO_TENANT_DOMAIN_SUFFIX").strip().lower().strip(".")
 DATABASE_ROUTERS = ["apps.core.db_router.CampusTenantRouter"]
 
 AUTH_PASSWORD_VALIDATORS = [
