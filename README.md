@@ -39,7 +39,7 @@ python -m venv .backend-venv
 $env:DJANGO_USE_SQLITE='True'
 Set-Location backend
 ..\.backend-venv\Scripts\python.exe manage.py migrate
-..\.backend-venv\Scripts\python.exe manage.py seed_demo
+..\.backend-venv\Scripts\python.exe manage.py createsuperuser
 ..\.backend-venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
 ```
 
@@ -58,18 +58,9 @@ Open:
 - API docs: `http://localhost:8000/api/docs/`
 - Django admin: `http://localhost:8000/admin/`
 
-## Demo Accounts
+## Authorized Accounts
 
-After `seed_demo`, all demo users use password `Mentriq@123`. The same demo-only list is written to `docs/demo-credentials.txt` each time the seed command runs.
-
-- `super.admin` - full access to all campuses and support issues
-- `it.admin` - Mentriq360 Main Campus IT admin
-- `north.admin` - Mentriq360 North Campus IT admin
-- `academic.admin` - academic records and exam workflows
-- `finance.admin` - fees and payment workflows
-- `teacher.meera` - assigned class access
-- `teacher.dev` - North Campus assigned class access
-- `student.anaya` - own profile only
+No default users or passwords are shipped with the ERP. Create the first Super Admin with `python manage.py createsuperuser`, then create School Admin, Account, Teacher, and Student users from the protected admin workspace.
 
 ## Campus Databases
 
@@ -95,7 +86,7 @@ DJANGO_TENANT_DOMAIN_SUFFIX=schools.example.com
 NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX=schools.example.com
 ```
 
-You can also set `NEXT_PUBLIC_DEFAULT_TENANT_CODE` for a single-campus deployment. Leave it empty for central/demo deployments.
+You can also set `NEXT_PUBLIC_DEFAULT_TENANT_CODE` for a single-campus deployment. Leave it empty for central deployments.
 
 For production web deployments, set `NEXT_PUBLIC_API_BASE_URL` to the deployed Django API URL, for example:
 

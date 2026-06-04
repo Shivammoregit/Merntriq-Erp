@@ -434,12 +434,10 @@ function MembershipForm({
         <label className="block text-sm font-medium text-ink">
           Campus role
           <select className={`mt-1 ${inputCls}`} value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as CampusMemberRole }))}>
-            <option value="it_admin">IT Admin</option>
-            <option value="academic_admin">Academic Admin</option>
-            <option value="finance_admin">Finance Admin</option>
-            <option value="hr_admin">HR Admin</option>
+            <option value="it_admin">School Admin</option>
+            <option value="finance_admin">Account</option>
             <option value="teacher">Teacher</option>
-            <option value="support">Support</option>
+            <option value="support">Student Portal</option>
           </select>
         </label>
         <div className="grid content-end gap-2">
@@ -874,7 +872,7 @@ export function CampusControlPanel() {
             </span>
             <h1 className="display-font mt-3 text-3xl font-semibold text-ink">Institution operations and access</h1>
             <p className="mt-2 max-w-3xl text-sm leading-7 text-muted">
-              Manage campus-specific branding, IT admins, attendance hardware, teacher attendance records, and approval requests from one operational surface.
+              Manage campus-specific branding, school admins, account access, attendance hardware, teacher attendance records, and approval requests from one operational surface.
             </p>
           </div>
           <button

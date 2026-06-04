@@ -5,7 +5,7 @@
 - API authentication uses JWT access and refresh tokens through `djangorestframework-simplejwt`.
 - Refresh tokens rotate and are blacklisted after rotation.
 - Password validation uses Django's built-in validators.
-- Demo credentials are for local development only and must not be used in production.
+- No default credentials are shipped with the application. The first Super Admin must be created with `python manage.py createsuperuser`, and all other accounts must be issued through authorized admin workflows.
 
 ## Authorization
 
@@ -15,9 +15,9 @@ Roles:
 
 - `super_admin`: platform owner and full control
 - `admin`: assigned-campus operations, academic setup, fees, reports, users
+- `account`: assigned-campus fee, payment, transaction, and salary workflows
 - `teacher`: assigned section attendance and student visibility
 - `student`: read-only access to the linked student record
-- `parent`: read-only access to students linked through guardian records
 
 The frontend hides unrelated screens, but the backend remains the authority for access control.
 
@@ -27,7 +27,7 @@ The frontend hides unrelated screens, but the backend remains the authority for 
 - Teachers can bulk mark attendance only for their assigned section.
 - Campus admins can read and write records only for campuses assigned through `CampusMembership`.
 - Students can view only their linked student profile and academic records.
-- Parents can view only students linked through `StudentGuardian`; they cannot write ERP records or read audit/staff profile data.
+- Parent-facing information is available only inside the authenticated Student Portal parent view.
 - When `X-Campus-Code` is supplied, tenant middleware routes the request to that campus database alias.
 
 ## Validation

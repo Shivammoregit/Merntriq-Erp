@@ -22,15 +22,18 @@ import {
 
 import {
   admitCardApi,
+  announcementApi,
   assignedWorkApi,
   attendanceApi,
   feeApi,
   learningResourceApi,
   paymentApi,
+  paymentTransactionApi,
   resultRecordApi,
   studentApi,
   ApiError,
   type AdmitCard,
+  type Announcement,
   type AssignedWork,
   type AttendanceRecord,
   type FeeAssignment,
@@ -39,11 +42,10 @@ import {
   type ResultRecord,
   type Student,
 } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
 import { Badge, statusBadge, statusLabel } from "@/components/ui/badge";
 import { WorkspacePlaceholder } from "@/components/ui/workspace-placeholder";
 
-type StudentView = "overview" | "profile" | "lms" | "fees" | "attendance" | "results" | "work" | "resources" | "admit";
+type StudentView = "overview" | "profile" | "lms" | "fees" | "attendance" | "results" | "work" | "resources" | "admit" | "parent";
 
 const studentViews: {
   id: StudentView;
@@ -59,6 +61,7 @@ const studentViews: {
   { id: "work", label: "Homework", icon: FileText },
   { id: "resources", label: "Course Registered", icon: BadgeCheck },
   { id: "admit", label: "Admit Card", icon: BadgeCheck },
+  { id: "parent", label: "Parent View", icon: UserRound },
 ];
 
 function asArray<T>(value: T[] | { results?: T[] }): T[] {
@@ -108,8 +111,8 @@ function profileValue(value?: string | null) {
   return value?.trim() || "Not added";
 }
 
-function pageTitleFor(view: StudentView, role?: string) {
-  if (view === "overview") return role === "parent" ? "Family Dashboard" : "Student Dashboard";
+function pageTitleFor(view: StudentView) {
+  if (view === "overview") return "Student Dashboard";
   if (view === "profile") return "Student Complete Detail";
   if (view === "lms") return "Select Course";
   if (view === "fees") return "Online Payment";
@@ -118,6 +121,7 @@ function pageTitleFor(view: StudentView, role?: string) {
   if (view === "work") return "Homework & Assignment";
   if (view === "resources") return "Course Registered";
   if (view === "admit") return "Admit Card";
+  if (view === "parent") return "Parent View";
   return "Student Dashboard";
 }
 
@@ -164,6 +168,7 @@ function StudentHomePage({
   openWork,
   visibleWork,
   visibleAdmitCards,
+  notices,
   setActiveView,
 }: {
   attendancePct: number;
@@ -172,6 +177,7 @@ function StudentHomePage({
   openWork: AssignedWork[];
   visibleWork: AssignedWork[];
   visibleAdmitCards: AdmitCard[];
+  notices: Announcement[];
   setActiveView: (view: StudentView) => void;
 }) {
   return (
@@ -257,9 +263,18 @@ function StudentHomePage({
         <div className="surface overflow-hidden shadow-soft">
           <PanelHeader title="Active Notice/News" icon={Bell} />
           <div className="px-4">
-            <DateNotice day="18" month="May" title="Invitation for participation in MentriQ School Olympiad 2026 Online Examination" />
-            <DateNotice day="14" month="May" title="3rd Term Time Table May 2026 for Class & Section" />
-            <DateNotice day="14" month="May" title="Notice 3 - Lost and Found" />
+            {notices.slice(0, 3).map((notice) => {
+              const date = notice.publish_on ? new Date(notice.publish_on) : new Date();
+              return (
+                <DateNotice
+                  key={notice.id}
+                  day={date.toLocaleDateString("en-IN", { day: "2-digit" })}
+                  month={date.toLocaleDateString("en-IN", { month: "short" })}
+                  title={notice.title}
+                />
+              );
+            })}
+            {!notices.length && <p className="px-2 py-10 text-center text-sm text-muted">No notices published yet.</p>}
           </div>
         </div>
       </section>
@@ -453,7 +468,6 @@ function StudentQuickTabs({
 }
 
 export function StudentDashboard() {
-  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [work, setWork] = useState<AssignedWork[]>([]);
@@ -463,6 +477,7 @@ export function StudentDashboard() {
   const [admitCards, setAdmitCards] = useState<AdmitCard[]>([]);
   const [fees, setFees] = useState<FeeAssignment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [activeView, setActiveView] = useState<StudentView>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -471,7 +486,7 @@ export function StudentDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [studentRes, workRes, attendanceRes, resultRes, resourceRes, admitRes, feeRes, paymentRes] = await Promise.all([
+      const [studentRes, workRes, attendanceRes, resultRes, resourceRes, admitRes, feeRes, paymentRes, announcementRes] = await Promise.all([
         studentApi.list(),
         assignedWorkApi.list(),
         attendanceApi.list(),
@@ -480,6 +495,7 @@ export function StudentDashboard() {
         admitCardApi.list(),
         feeApi.list(),
         paymentApi.list(),
+        announcementApi.list(),
       ]);
       const studentList = asArray(studentRes);
       setStudents(studentList);
@@ -495,6 +511,7 @@ export function StudentDashboard() {
       setAdmitCards(asArray(admitRes));
       setFees(asArray(feeRes));
       setPayments(asArray(paymentRes));
+      setAnnouncements(asArray(announcementRes));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load student workspace.");
     } finally {
@@ -573,7 +590,7 @@ export function StudentDashboard() {
     <div className="space-y-6">
       <div className="mastersoft-page-title flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <span className="block truncate">{pageTitleFor(activeView, user?.role)}</span>
+          <span className="block truncate">{pageTitleFor(activeView)}</span>
           <span className="mt-1 block text-sm font-medium text-muted">
             {student.full_name} - {student.admission_number}
           </span>
@@ -618,6 +635,7 @@ export function StudentDashboard() {
               openWork={openWork}
               visibleWork={visibleWork}
               visibleAdmitCards={visibleAdmitCards}
+              notices={announcements}
               setActiveView={setActiveView}
             />
           )}
@@ -663,6 +681,20 @@ export function StudentDashboard() {
               payments={visiblePayments}
               outstandingAmount={outstandingAmount}
               paidAmount={paidAmount}
+            />
+          )}
+          {activeView === "parent" && (
+            <ParentViewPage
+              student={student}
+              attendancePct={attendancePct}
+              outstandingAmount={outstandingAmount}
+              paidAmount={paidAmount}
+              assignments={visibleWork}
+              results={visibleResults}
+              resources={visibleResources}
+              fees={visibleFees}
+              payments={visiblePayments}
+              notices={announcements}
             />
           )}
           {activeView === "resources" && <ResourceList items={visibleResources} />}
@@ -732,6 +764,118 @@ function ResultList({ items, framed = false }: { items: ResultRecord[]; framed?:
   return <section className="surface overflow-hidden shadow-soft">{content}</section>;
 }
 
+function ParentViewPage({
+  student,
+  attendancePct,
+  outstandingAmount,
+  paidAmount,
+  assignments,
+  results,
+  resources,
+  fees,
+  payments,
+  notices,
+}: {
+  student: Student;
+  attendancePct: number;
+  outstandingAmount: number;
+  paidAmount: number;
+  assignments: AssignedWork[];
+  results: ResultRecord[];
+  resources: LearningResource[];
+  fees: FeeAssignment[];
+  payments: Payment[];
+  notices: Announcement[];
+}) {
+  const latestResult = results[0];
+  const pendingAssignments = assignments.filter((item) => item.status !== "closed");
+  const pendingFees = fees.filter((item) => item.status !== "paid");
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+      <section className="surface p-5 shadow-soft xl:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Parent View</p>
+            <h2 className="mt-1 text-xl font-semibold text-ink">{student.full_name}</h2>
+            <p className="mt-1 text-sm text-muted">{student.section_label} - {student.campus_name}</p>
+          </div>
+          <Badge variant={attendancePct >= 75 ? "success" : attendancePct >= 50 ? "warning" : "danger"}>
+            {attendancePct}% attendance
+          </Badge>
+        </div>
+      </section>
+
+      {[
+        ["Pending fees", formatMoney(outstandingAmount), `${pendingFees.length} open fee record${pendingFees.length === 1 ? "" : "s"}`],
+        ["Paid fees", formatMoney(paidAmount), `${payments.length} receipt${payments.length === 1 ? "" : "s"}`],
+        ["Pending assignments", pendingAssignments.length, `${assignments.length} total assignment${assignments.length === 1 ? "" : "s"}`],
+        ["Available notes", resources.length, "Teacher-uploaded study material"],
+      ].map(([label, value, note]) => (
+        <div key={label} className="surface p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">{label}</p>
+          <p className="display-font mt-2 text-3xl font-semibold text-ink">{value}</p>
+          <p className="mt-1 text-xs text-muted">{note}</p>
+        </div>
+      ))}
+
+      <section className="surface overflow-hidden shadow-soft">
+        <PanelHeader title="Fees & Payment Status" icon={ReceiptText} />
+        <div className="divide-y divide-line/50">
+          {fees.length ? fees.slice(0, 5).map((fee) => (
+            <div key={fee.id} className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+              <div>
+                <p className="font-semibold text-ink">{fee.title}</p>
+                <p className="text-xs text-muted">Due {formatDate(fee.due_date)}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold text-ink">{formatMoney(fee.outstanding_amount ?? fee.amount)}</p>
+                <Badge variant={statusBadge(fee.status)}>{fee.status}</Badge>
+              </div>
+            </div>
+          )) : <p className="px-5 py-10 text-center text-sm text-muted">No fee records available.</p>}
+        </div>
+      </section>
+
+      <section className="surface overflow-hidden shadow-soft">
+        <PanelHeader title="Results" icon={Award} />
+        {latestResult ? (
+          <div className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">{latestResult.exam_name}</p>
+            <h3 className="mt-1 font-semibold text-ink">{latestResult.subject}</h3>
+            <p className="mt-3 display-font text-3xl font-semibold text-ink">{scorePercent(latestResult)}%</p>
+            <p className="mt-1 text-sm text-muted">{latestResult.score} / {latestResult.max_score} {latestResult.grade ? `- ${latestResult.grade}` : ""}</p>
+          </div>
+        ) : <p className="px-5 py-10 text-center text-sm text-muted">No published results yet.</p>}
+      </section>
+
+      <section className="surface overflow-hidden shadow-soft">
+        <PanelHeader title="Assignments & Documents" icon={FileText} />
+        <div className="divide-y divide-line/50">
+          {assignments.length ? assignments.slice(0, 5).map((item) => (
+            <div key={item.id} className="px-5 py-4">
+              <p className="font-semibold text-ink">{item.title}</p>
+              <p className="mt-1 text-xs text-muted">{item.subject} - Due {formatDate(item.due_date)}</p>
+            </div>
+          )) : <p className="px-5 py-10 text-center text-sm text-muted">No assignments available.</p>}
+        </div>
+      </section>
+
+      <section className="surface overflow-hidden shadow-soft">
+        <PanelHeader title="Notices" icon={Bell} />
+        <div className="divide-y divide-line/50">
+          {notices.length ? notices.slice(0, 5).map((notice) => (
+            <div key={notice.id} className="px-5 py-4">
+              <p className="font-semibold text-ink">{notice.title}</p>
+              <p className="mt-1 text-xs text-muted">{formatDate(notice.publish_on)}</p>
+            </div>
+          )) : <p className="px-5 py-10 text-center text-sm text-muted">No notices available.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function OnlinePaymentPage({
   student,
   items,
@@ -745,6 +889,10 @@ function OnlinePaymentPage({
   outstandingAmount: number;
   paidAmount: number;
 }) {
+  const [payBusy, setPayBusy] = useState(false);
+  const [payMessage, setPayMessage] = useState("");
+  const [payError, setPayError] = useState("");
+  const payableFee = items.find((item) => item.status !== "paid" && amountValue(item.outstanding_amount ?? item.amount) > 0);
   const tableRows = items.length
     ? items.map((item, index) => ({
         id: item.id,
@@ -754,12 +902,38 @@ function OnlinePaymentPage({
         paid: item.amount_paid ?? "0",
         balance: item.outstanding_amount ?? "0",
       }))
-    : [
-        { id: 1, receiptType: "Academic Fees", semester: "I", payable: "85000", paid: "85000", balance: "0" },
-        { id: 2, receiptType: "Academic Fees", semester: "II", payable: "75000", paid: "75000", balance: "0" },
-        { id: 3, receiptType: "Academic Fees", semester: "III", payable: "75000", paid: "75000", balance: "0" },
-        { id: 4, receiptType: "Academic Fees", semester: "IV", payable: "75000", paid: "75000", balance: "0" },
-      ];
+    : [];
+
+  async function startPayment() {
+    if (!payableFee) return;
+    setPayBusy(true);
+    setPayError("");
+    setPayMessage("");
+    try {
+      await paymentTransactionApi.create({
+        campus: student.campus,
+        student: student.id,
+        fee_assignment: payableFee.id,
+        payment: null,
+        provider: "razorpay",
+        method: "upi",
+        amount: String(amountValue(payableFee.outstanding_amount ?? payableFee.amount)),
+        currency: "INR",
+        status: "pending",
+        gateway_order_id: "",
+        gateway_payment_id: "",
+        gateway_signature: "",
+        receipt_number: "",
+        webhook_verified: false,
+        raw_payload: { source: "student_portal", fee_title: payableFee.title },
+      });
+      setPayMessage("Payment transaction created. Complete the payment from the configured Razorpay/UPI checkout.");
+    } catch (err) {
+      setPayError(err instanceof ApiError ? err.message : "Unable to start payment.");
+    } finally {
+      setPayBusy(false);
+    }
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
@@ -811,10 +985,17 @@ function OnlinePaymentPage({
         </div>
 
         <div className="mt-12 flex justify-center">
-          <button type="button" className="rounded-md border border-red-500 px-5 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
-            Cancel
+          <button
+            type="button"
+            onClick={startPayment}
+            disabled={!payableFee || payBusy}
+            className="rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {payBusy ? "Starting..." : "Pay Now"}
           </button>
         </div>
+        {payMessage && <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-700">{payMessage}</p>}
+        {payError && <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-center text-sm text-rose-700">{payError}</p>}
 
         <div className="mt-7">
           <h2 className="mastersoft-section-title">Payment Details</h2>
@@ -828,7 +1009,7 @@ function OnlinePaymentPage({
                 </tr>
               </thead>
               <tbody>
-                {tableRows.map((row) => (
+                {tableRows.length ? tableRows.map((row) => (
                   <tr key={row.id} className="border-b border-white even:bg-slate-100">
                     <td className="px-4 py-3">{row.receiptType}</td>
                     <td className="px-4 py-3 text-blue-700">{row.semester}</td>
@@ -836,7 +1017,9 @@ function OnlinePaymentPage({
                     <td className="px-4 py-3">{Number(row.paid || 0).toFixed(2)}</td>
                     <td className="px-4 py-3">{Number(row.balance || 0).toFixed(2)}</td>
                   </tr>
-                ))}
+                )) : (
+                  <tr><td className="px-4 py-8 text-center text-muted" colSpan={5}>No fee payment records available.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

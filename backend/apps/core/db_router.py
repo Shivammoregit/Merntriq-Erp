@@ -11,7 +11,7 @@ class CampusTenantRouter:
 
     The active database is set by CampusTenantMiddleware from X-Campus-Code.
     Without that header the app continues to use the default database, preserving
-    existing local/demo behavior.
+    existing local behavior.
     """
 
     def _is_routed_app(self, app_label: str) -> bool:

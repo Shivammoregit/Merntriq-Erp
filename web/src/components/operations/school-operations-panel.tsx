@@ -68,7 +68,8 @@ function statusVariant(active: boolean) {
 function roleName(role?: UserRole) {
   if (!role) return "";
   if (role === "super_admin") return "Super Admin";
-  if (role === "parent") return "Parent";
+  if (role === "admin") return "School Admin";
+  if (role === "account") return "Account";
   return role[0].toUpperCase() + role.slice(1);
 }
 

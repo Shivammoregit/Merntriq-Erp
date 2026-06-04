@@ -8,12 +8,17 @@ import {
   CalendarDays,
   CheckCircle2,
   Download,
+  Eye,
   FileSpreadsheet,
   GraduationCap,
+  Mail,
+  MapPin,
   MoreHorizontal,
+  Phone,
   Plus,
   RefreshCcw,
   Search,
+  Shield,
   Trash2,
   Upload,
   UserCog,
@@ -33,6 +38,7 @@ import {
   type ClassSection,
   type ERPUser,
   type Student,
+  type UserDetail,
   type UserRole,
 } from "@/lib/api";
 import { Badge, statusBadge } from "@/components/ui/badge";
@@ -512,6 +518,18 @@ function UserForm({
     first_name: initial?.first_name ?? "",
     last_name: initial?.last_name ?? "",
     phone_number: initial?.phone_number ?? "",
+    gender: initial?.gender ?? "",
+    date_of_birth: initial?.date_of_birth ?? "",
+    address: initial?.address ?? "",
+    city: initial?.city ?? "",
+    state: initial?.state ?? "",
+    pincode: initial?.pincode ?? "",
+    blood_group: initial?.blood_group ?? "",
+    emergency_contact_name: initial?.emergency_contact_name ?? "",
+    emergency_contact_phone: initial?.emergency_contact_phone ?? "",
+    qualification: initial?.qualification ?? "",
+    profile_photo_url: initial?.profile_photo_url ?? "",
+    bio: initial?.bio ?? "",
     role: (initial?.role ?? "teacher") as UserRole,
     is_active: initial?.is_active ?? true,
     password: "",
@@ -543,19 +561,22 @@ function UserForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
       <ErrorNote message={error} />
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Account identity</p>
+        </div>
         <Field label="Username *">
           <input className={inputCls} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} required />
         </Field>
         <Field label="Role *">
           <select className={inputCls} value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as UserRole }))}>
             {allowSuperAdmin && <option value="super_admin">Super Admin</option>}
-            <option value="admin">Admin</option>
+            <option value="admin">School Admin</option>
+            <option value="account">Account</option>
             <option value="teacher">Teacher</option>
             <option value="student">Student</option>
-            <option value="parent">Parent</option>
           </select>
         </Field>
         <Field label="First name">
@@ -564,12 +585,6 @@ function UserForm({
         <Field label="Last name">
           <input className={inputCls} value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} />
         </Field>
-        <Field label="Email">
-          <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-        </Field>
-        <Field label="Phone">
-          <input className={inputCls} value={form.phone_number} onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))} />
-        </Field>
         <Field label={initial ? "New password" : "Password *"}>
           <input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} required={!initial} minLength={8} />
         </Field>
@@ -577,9 +592,78 @@ function UserForm({
           <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} />
           Active user
         </label>
+
+        <div className="border-t border-line/60 pt-4 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Personal details</p>
+        </div>
+        <Field label="Gender">
+          <select className={inputCls} value={form.gender} onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}>
+            <option value="">Select gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+        </Field>
+        <Field label="Date of Birth">
+          <input type="date" className={inputCls} value={form.date_of_birth} onChange={(e) => setForm((f) => ({ ...f, date_of_birth: e.target.value }))} />
+        </Field>
+        <Field label="Blood Group">
+          <select className={inputCls} value={form.blood_group} onChange={(e) => setForm((f) => ({ ...f, blood_group: e.target.value }))}>
+            <option value="">Select blood group</option>
+            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Profile Photo URL">
+          <input className={inputCls} value={form.profile_photo_url} onChange={(e) => setForm((f) => ({ ...f, profile_photo_url: e.target.value }))} placeholder="https://..." />
+        </Field>
+        <Field label="Bio" wide>
+          <textarea className={`${inputCls} min-h-16 resize-y`} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} placeholder="Brief description..." />
+        </Field>
+
+        <div className="border-t border-line/60 pt-4 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Contact information</p>
+        </div>
+        <Field label="Email">
+          <input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+        </Field>
+        <Field label="Phone">
+          <input className={inputCls} value={form.phone_number} onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))} />
+        </Field>
+        <Field label="Emergency Contact Name">
+          <input className={inputCls} value={form.emergency_contact_name} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_name: e.target.value }))} />
+        </Field>
+        <Field label="Emergency Contact Phone">
+          <input className={inputCls} value={form.emergency_contact_phone} onChange={(e) => setForm((f) => ({ ...f, emergency_contact_phone: e.target.value }))} />
+        </Field>
+
+        <div className="border-t border-line/60 pt-4 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Address</p>
+        </div>
+        <Field label="Address" wide>
+          <textarea className={`${inputCls} min-h-16 resize-y`} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+        </Field>
+        <Field label="City">
+          <input className={inputCls} value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} />
+        </Field>
+        <Field label="State">
+          <input className={inputCls} value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} />
+        </Field>
+        <Field label="Pincode">
+          <input className={inputCls} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} />
+        </Field>
+
+        <div className="border-t border-line/60 pt-4 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Professional</p>
+        </div>
+        <Field label="Qualification" wide>
+          <input className={inputCls} value={form.qualification} onChange={(e) => setForm((f) => ({ ...f, qualification: e.target.value }))} placeholder="e.g. M.Tech, B.Ed..." />
+        </Field>
+
         {form.role !== "super_admin" && (
-        <div className="sm:col-span-2">
-          <p className="text-sm font-medium text-ink">Campus access</p>
+        <div className="border-t border-line/60 pt-4 sm:col-span-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Campus access</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {campuses.map((campus) => (
               <label key={campus.id} className="flex items-center gap-2 rounded-2xl border border-line/70 bg-white px-3 py-2 text-sm text-ink">
@@ -602,6 +686,185 @@ function UserForm({
       </div>
       <FormActions busy={busy} label="Save user" onCancel={onCancel} />
     </form>
+  );
+}
+
+function userProfileCompletionPct(user: ERPUser) {
+  const items = [
+    user.email,
+    user.phone_number,
+    user.gender,
+    user.date_of_birth,
+    user.address,
+    user.city,
+    user.blood_group,
+    user.qualification,
+    user.profile_photo_url,
+    user.bio,
+  ];
+  return Math.round((items.filter((v) => v?.trim()).length / items.length) * 100);
+}
+
+function UserDetailModal({
+  userId,
+  open,
+  onClose,
+}: {
+  userId: number | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [detail, setDetail] = useState<UserDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || !userId) { setDetail(null); return; }
+    setLoading(true);
+    userApi.detail(userId).then(setDetail).catch(() => setDetail(null)).finally(() => setLoading(false));
+  }, [open, userId]);
+
+  if (!open) return null;
+
+  const avatarUrl = detail?.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((detail?.first_name?.[0] ?? "") + (detail?.last_name?.[0] ?? ""))}`;
+
+  return (
+    <Modal open={open} onClose={onClose} title="User Profile" size="lg">
+      {loading && <WorkspacePlaceholder title="Loading profile" detail="Fetching user details..." />}
+      {!loading && detail && (
+        <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+          {/* Header */}
+          <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-slate-50 to-teal-50 p-5">
+            <img src={avatarUrl} alt={detail.full_name} className="h-16 w-16 rounded-2xl border-2 border-white shadow-md object-cover" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-ink truncate">{detail.full_name || detail.username}</h3>
+              <p className="text-sm text-muted">@{detail.username}</p>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <Badge variant={detail.is_active ? "success" : "danger"}>{detail.is_active ? "Active" : "Inactive"}</Badge>
+                <Badge variant="info">{detail.role.replace("_", " ")}</Badge>
+                {detail.gender && <Badge variant="neutral">{detail.gender}</Badge>}
+              </div>
+            </div>
+            <div className="text-right hidden sm:block">
+              <p className="text-xs text-muted">Profile</p>
+              <p className="text-2xl font-bold text-teal-600">{userProfileCompletionPct(detail)}%</p>
+            </div>
+          </div>
+
+          {/* Bio */}
+          {detail.bio && (
+            <div className="rounded-2xl border border-line/60 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">About</p>
+              <p className="text-sm text-ink leading-relaxed">{detail.bio}</p>
+            </div>
+          )}
+
+          {/* Personal & Contact Grid */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-line/60 bg-white p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted flex items-center gap-2"><Shield size={12} /> Personal Info</p>
+              <DetailRow label="Date of Birth" value={detail.date_of_birth ? new Date(detail.date_of_birth).toLocaleDateString("en-IN") : ""} />
+              <DetailRow label="Gender" value={detail.gender} />
+              <DetailRow label="Blood Group" value={detail.blood_group} />
+              <DetailRow label="Qualification" value={detail.qualification} />
+            </div>
+            <div className="rounded-2xl border border-line/60 bg-white p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted flex items-center gap-2"><Phone size={12} /> Contact</p>
+              <DetailRow label="Email" value={detail.email} icon={<Mail size={12} className="text-muted" />} />
+              <DetailRow label="Phone" value={detail.phone_number} icon={<Phone size={12} className="text-muted" />} />
+              <DetailRow label="Emergency" value={detail.emergency_contact_name ? `${detail.emergency_contact_name} (${detail.emergency_contact_phone})` : ""} />
+            </div>
+          </div>
+
+          {/* Address */}
+          {(detail.address || detail.city) && (
+            <div className="rounded-2xl border border-line/60 bg-white p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted flex items-center gap-2"><MapPin size={12} /> Address</p>
+              <p className="text-sm text-ink">{[detail.address, detail.city, detail.state, detail.pincode].filter(Boolean).join(", ")}</p>
+            </div>
+          )}
+
+          {/* Campus Memberships */}
+          {detail.campuses && detail.campuses.length > 0 && (
+            <div className="rounded-2xl border border-line/60 bg-white p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted flex items-center gap-2"><Building2 size={12} /> Campus Access</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {detail.campuses.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                    <Building2 size={14} className="text-teal-600" />
+                    <span className="font-semibold text-ink">{c.name}</span>
+                    <Badge variant="neutral">{c.role.replace("_", " ")}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Linked Profiles */}
+          {detail.linked_student && (
+            <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal-700 flex items-center gap-2"><GraduationCap size={12} /> Linked Student Profile</p>
+              <div className="grid gap-2 sm:grid-cols-2 text-sm">
+                <DetailRow label="Admission No." value={detail.linked_student.admission_number} />
+                <DetailRow label="Section" value={detail.linked_student.section} />
+                <DetailRow label="Campus" value={detail.linked_student.campus} />
+                <DetailRow label="Status" value={detail.linked_student.status} />
+                <DetailRow label="Father" value={detail.linked_student.father_name} />
+                <DetailRow label="Mother" value={detail.linked_student.mother_name} />
+              </div>
+            </div>
+          )}
+          {detail.linked_staff && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-blue-700 flex items-center gap-2"><UserCog size={12} /> Linked Staff Profile</p>
+              <div className="grid gap-2 sm:grid-cols-2 text-sm">
+                <DetailRow label="Employee Code" value={detail.linked_staff.employee_code} />
+                <DetailRow label="Designation" value={detail.linked_staff.designation} />
+                <DetailRow label="Department" value={detail.linked_staff.department} />
+                <DetailRow label="Employment" value={detail.linked_staff.employment_type?.replace("_", " ")} />
+                <DetailRow label="Joining Date" value={detail.linked_staff.joining_date ? new Date(detail.linked_staff.joining_date).toLocaleDateString("en-IN") : ""} />
+                <DetailRow label="Status" value={detail.linked_staff.status} />
+              </div>
+            </div>
+          )}
+
+          {/* Recent Activity */}
+          {detail.recent_activity && detail.recent_activity.length > 0 && (
+            <div className="rounded-2xl border border-line/60 bg-white p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-muted">Recent Activity</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {detail.recent_activity.map((event, i) => (
+                  <div key={i} className="flex items-start gap-3 text-sm border-b border-line/30 pb-2 last:border-0">
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-teal-400 shrink-0" />
+                    <div>
+                      <span className="font-medium text-ink capitalize">{event.action}</span>
+                      <span className="text-muted"> · {event.entity_type}</span>
+                      {event.summary && <span className="text-muted"> — {event.summary}</span>}
+                      <p className="text-xs text-muted mt-0.5">{new Date(event.created_at).toLocaleString("en-IN")}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Timestamps */}
+          <div className="flex gap-6 text-xs text-muted pt-2 border-t border-line/40">
+            <span>Created: {detail.created_at ? new Date(detail.created_at).toLocaleDateString("en-IN") : "—"}</span>
+            <span>Updated: {detail.updated_at ? new Date(detail.updated_at).toLocaleDateString("en-IN") : "—"}</span>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function DetailRow({ label, value, icon }: { label: string; value?: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="text-xs text-muted w-24 shrink-0">{label}</span>
+      <span className="text-sm font-medium text-ink truncate">{value || "—"}</span>
+    </div>
   );
 }
 
@@ -902,11 +1165,12 @@ function BulkImportModal({
           importResults.push({ row: rowNumber, label: student.full_name, status: "success", message: "Student created" });
         } else {
           if (!row.username) throw new Error("Username is required.");
+          if (!row.password) throw new Error("Password is required for teacher imports.");
           const campusIds = resolveCampusIds(row, campuses, fallbackCampus);
           if (!campusIds.length) throw new Error("Campus not found. Use campus_codes or select a single campus.");
           const teacher = await userApi.create({
             username: row.username,
-            password: row.password || "Mentriq@123",
+            password: row.password,
             first_name: row.first_name || "",
             last_name: row.last_name || "",
             email: row.email || "",
@@ -1052,6 +1316,7 @@ export function AdminDashboard() {
   const [modal, setModal] = useState<AdminView | null>(null);
   const [bulkTarget, setBulkTarget] = useState<ImportTarget | null>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [viewingUserId, setViewingUserId] = useState<number | null>(null);
 
   const canManageCampuses = user?.role === "super_admin";
   const campusScopedViews = canManageCampuses ? adminViews : adminViews.filter((view) => view.id !== "campuses");
@@ -1407,22 +1672,68 @@ export function AdminDashboard() {
       )}
 
       {activeView === "users" && (
-        <CardGrid>
-          {visibleUsers.map((user) => (
-            <AdminCard key={user.id} title={user.full_name || user.username} subtitle={user.email || user.username} meta={user.role.replace("_", " ")} onEdit={() => openModal("users", user)} onDelete={() => removeRecord("users", user.id)}>
-              <Badge variant={user.is_active ? "success" : "danger"}>{user.is_active ? "active" : "inactive"}</Badge>
-              {user.campuses && user.campuses.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {user.campuses.map((campus) => (
-                    <span key={`${user.id}-${campus.id}`} className="rounded-full border border-line/70 bg-page px-3 py-1 text-xs text-muted">
-                      {campus.code}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </AdminCard>
-          ))}
-        </CardGrid>
+        <div className="surface overflow-hidden shadow-soft">
+          <div className="flex flex-wrap items-center gap-3 border-b border-line/60 px-4 py-4 sm:px-5">
+            <div className="relative min-w-0 flex-1 basis-full sm:basis-72">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, email, phone, city..." className="w-full rounded-2xl border border-line/70 bg-white py-2.5 pl-9 pr-4 text-sm text-ink outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line/60 bg-slate-50">
+                  {["", "Name", "Username", "Role", "Email", "Phone", "City", "Profile", "Status", "Actions"].map((head) => <th key={head} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">{head}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleUsers.filter((u) => {
+                  const q = search.toLowerCase();
+                  return !q || [u.full_name, u.username, u.email, u.phone_number, u.city, u.role].some((v) => v?.toLowerCase().includes(q));
+                }).map((u) => {
+                  const avatarUrl = u.profile_photo_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent((u.first_name?.[0] ?? "") + (u.last_name?.[0] ?? ""))}`;
+                  return (
+                    <tr key={u.id} className="border-b border-line/40 hover:bg-slate-50/60">
+                      <td className="px-4 py-3">
+                        <img src={avatarUrl} alt={u.full_name} className="h-9 w-9 rounded-xl border border-line/40 object-cover" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-ink">{u.full_name || u.username}</p>
+                        {u.gender && <p className="text-xs text-muted capitalize">{u.gender}</p>}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted">{u.username}</td>
+                      <td className="px-4 py-3"><Badge variant="info">{u.role.replace("_", " ")}</Badge></td>
+                      <td className="px-4 py-3 text-muted">{u.email || "—"}</td>
+                      <td className="px-4 py-3 text-muted">{u.phone_number || "—"}</td>
+                      <td className="px-4 py-3 text-muted">{u.city || "—"}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs font-medium text-ink">Profile {userProfileCompletionPct(u)}%</p>
+                        <div className="mt-1 h-1.5 w-16 rounded-full bg-slate-200 overflow-hidden">
+                          <div className="h-full rounded-full bg-gradient-to-r from-teal-500 to-blue-500 transition-all" style={{ width: `${userProfileCompletionPct(u)}%` }} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><Badge variant={u.is_active ? "success" : "danger"}>{u.is_active ? "active" : "inactive"}</Badge></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          <button type="button" onClick={() => setViewingUserId(u.id)} className="flex items-center gap-1 rounded-xl border border-teal-200 px-2.5 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-50" title="View full profile">
+                            <Eye size={12} />
+                            View
+                          </button>
+                          <button type="button" onClick={() => openModal("users", u)} className="rounded-xl border border-line/70 px-2.5 py-1.5 text-xs font-medium text-ink transition hover:bg-slate-100">
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => removeRecord("users", u.id)} className="flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       <Modal open={modal === "students"} onClose={closeModal} title={editing ? "Edit Student" : "Add Student"} size="lg">
@@ -1457,13 +1768,15 @@ export function AdminDashboard() {
         }} onCancel={closeModal} />
       </Modal>
 
-      <Modal open={modal === "users"} onClose={closeModal} title={editing ? "Edit User" : "Add User"} size="md">
+      <Modal open={modal === "users"} onClose={closeModal} title={editing ? "Edit User" : "Add User"} size="lg">
         <UserForm campuses={visibleCampuses} selectedCampusId={selectedCampusId} allowSuperAdmin={canManageCampuses} initial={editing && "username" in editing ? editing : undefined} onSave={async (data) => {
           if (editing && "username" in editing) await userApi.update(editing.id, data);
           else await userApi.create(data);
           await refreshAfterSave();
         }} onCancel={closeModal} />
       </Modal>
+
+      <UserDetailModal userId={viewingUserId} open={viewingUserId !== null} onClose={() => setViewingUserId(null)} />
 
       <BulkImportModal
         target={bulkTarget}

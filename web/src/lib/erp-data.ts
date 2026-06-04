@@ -1,8 +1,8 @@
-export const roleTabs = ["Admin", "Teacher", "Student", "Parent"] as const;
+export const roleTabs = ["Admin", "Account", "Teacher", "Student"] as const;
 
 export const overviewMetrics = [
-  { label: "Connected modules", value: "21", delta: "Admissions, SIS, parent portal, staff, finance, exams, services, analytics, security", tone: "info" },
-  { label: "Active roles", value: "5", delta: "Super Admin, Admin, Teacher, Student, Parent", tone: "accent" },
+  { label: "Connected modules", value: "21", delta: "Admissions, SIS, student parent view, staff, finance, exams, services, analytics, security", tone: "info" },
+  { label: "Active roles", value: "5", delta: "Super Admin, School Admin, Account, Teacher, Student", tone: "accent" },
   { label: "Core records", value: "20+", delta: "Campus, users, students, attendance, fees, academics, support, audit", tone: "warning" },
   { label: "Workflow lanes", value: "8", delta: "Admissions, People, Academics, Operations, Finance, Services, Leadership, Security", tone: "danger" }
 ] as const;
@@ -15,7 +15,7 @@ export const workflowPhases = [
     title: "Login, register, and route by role",
     description:
       "The frontend starts with a secure login gate, then sends the user to the correct workspace based on the backend role returned by JWT.",
-    backend: ["accounts.UserRole", "JWT token pair", "Current user profile", "Parent guardian links"],
+    backend: ["accounts.UserRole", "JWT token pair", "Current user profile", "Student parent view"],
     ui: ["Login / Register", "Role decision", "Session shell"],
     outcome: "Authenticated access with role-specific landing"
   },
@@ -25,7 +25,7 @@ export const workflowPhases = [
     icon: "LayoutDashboard",
     title: "Create campus admins, students, and class sections",
     description:
-      "The admin flow mirrors the diagram and adds campus separation: super admins create campuses, assign IT admins, add students, assign class sections, and approve operational changes.",
+      "The admin flow mirrors the diagram and adds campus separation: super admins create campuses, assign school admins, add students, assign class sections, and approve operational changes.",
     backend: ["Campus", "CampusMembership", "AcademicSession", "ClassSection", "Student", "ApprovalRequest"],
     ui: ["Campus control", "User admin", "Student intake form", "Approval queue"],
     outcome: "Campus-scoped users, students, and approvals ready for downstream operations"
@@ -105,7 +105,7 @@ export const flowNodes = [
 
 export const roleWorkspaces = {
   Admin: ["Admissions", "SIS", "Staff", "Fees", "Exams", "Services", "Reports"],
+  Account: ["Fee status", "Payments", "Receipts", "Reminders", "Salary", "Transactions"],
   Teacher: ["My classes", "Attendance", "Homework", "Resources", "Results", "Timetable"],
-  Student: ["Homework", "Attendance", "Results", "Notes", "Admit card", "Library"],
-  Parent: ["Linked students", "Attendance", "Fees", "Results", "Transport", "Hostel"]
+  Student: ["Homework", "Attendance", "Results", "Notes", "Fees", "Parent view"]
 } as const;

@@ -12,10 +12,14 @@ import {
 import {
   feeApi,
   paymentApi,
+  paymentTransactionApi,
+  salaryRecordApi,
   studentApi,
   type FeeAssignment,
   type Payment,
+  type PaymentTransaction,
   type PaymentMethod,
+  type SalaryRecord,
   type Student,
   ApiError,
 } from "@/lib/api";
@@ -151,9 +155,12 @@ function PaymentForm({
           <label className="block text-sm font-medium text-ink">Payment Method *</label>
           <select id="payment-method" className={`mt-1 ${inputCls}`} value={form.payment_method} onChange={set("payment_method")}>
             <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
             <option value="card">Card</option>
-            <option value="bank">Bank Transfer</option>
-            <option value="online">Online (UPI)</option>
+            <option value="net_banking">Net banking</option>
+            <option value="wallet">Wallet</option>
+            <option value="bank">Bank transfer</option>
+            <option value="online">Gateway</option>
           </select>
         </div>
         <div>
@@ -177,6 +184,8 @@ export function FeesPaymentsDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [fees, setFees] = useState<FeeAssignment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -189,10 +198,18 @@ export function FeesPaymentsDashboard() {
     setLoading(true);
     setError("");
     try {
-      const [s, f, p] = await Promise.all([studentApi.list(), feeApi.list(), paymentApi.list()]);
+      const [s, f, p, salaries, tx] = await Promise.all([
+        studentApi.list(),
+        feeApi.list(),
+        paymentApi.list(),
+        salaryRecordApi.list(),
+        paymentTransactionApi.list(),
+      ]);
       setStudents(Array.isArray(s) ? s : (s as { results: Student[] }).results ?? []);
       setFees(Array.isArray(f) ? f : (f as { results: FeeAssignment[] }).results ?? []);
       setPayments(Array.isArray(p) ? p : (p as { results: Payment[] }).results ?? []);
+      setSalaryRecords(Array.isArray(salaries) ? salaries : (salaries as { results: SalaryRecord[] }).results ?? []);
+      setTransactions(Array.isArray(tx) ? tx : (tx as { results: PaymentTransaction[] }).results ?? []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load data.");
     } finally {
@@ -214,6 +231,19 @@ export function FeesPaymentsDashboard() {
   const totalAssigned = fees.reduce((acc, f) => acc + parseFloat(f.amount), 0);
   const totalCollected = payments.reduce((acc, p) => acc + parseFloat(p.amount_paid), 0);
   const totalPending = fees.filter((f) => f.status === "pending" || f.status === "partial").reduce((acc, f) => acc + parseFloat(f.amount), 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCollection = payments
+    .filter((payment) => payment.paid_on === today)
+    .reduce((acc, payment) => acc + parseFloat(payment.amount_paid), 0);
+  const onlineCollection = payments
+    .filter((payment) => ["online", "upi", "card", "net_banking", "wallet"].includes(payment.payment_method))
+    .reduce((acc, payment) => acc + parseFloat(payment.amount_paid), 0);
+  const offlineCollection = payments
+    .filter((payment) => ["cash", "bank"].includes(payment.payment_method))
+    .reduce((acc, payment) => acc + parseFloat(payment.amount_paid), 0);
+  const salaryPayable = salaryRecords
+    .filter((salary) => salary.payment_status !== "paid")
+    .reduce((acc, salary) => acc + parseFloat(salary.final_salary), 0);
 
   async function handleCreateFee(data: { student: number; title: string; amount: string; due_date: string }) {
     await feeApi.create(data as Parameters<typeof feeApi.create>[0]);
@@ -256,7 +286,7 @@ export function FeesPaymentsDashboard() {
       </section>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="surface rounded-3xl p-5 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Total Assigned</p>
           <p className="display-font mt-3 text-3xl font-bold text-ink">₹{totalAssigned.toLocaleString("en-IN")}</p>
@@ -271,6 +301,34 @@ export function FeesPaymentsDashboard() {
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Outstanding</p>
           <p className="display-font mt-3 text-3xl font-bold text-rose-600">₹{totalPending.toLocaleString("en-IN")}</p>
           <p className="mt-1 text-xs text-muted">{fees.filter((f) => ["pending", "partial", "overdue"].includes(f.status)).length} pending</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="surface rounded-3xl p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Today</p>
+          <p className="display-font mt-3 text-3xl font-bold text-blue-700">â‚¹{todayCollection.toLocaleString("en-IN")}</p>
+          <p className="mt-1 text-xs text-muted">Collection recorded today</p>
+        </div>
+        <div className="surface rounded-3xl p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Online</p>
+          <p className="display-font mt-3 text-3xl font-bold text-emerald-700">â‚¹{onlineCollection.toLocaleString("en-IN")}</p>
+          <p className="mt-1 text-xs text-muted">UPI, card, net banking, wallet, gateway</p>
+        </div>
+        <div className="surface rounded-3xl p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Offline</p>
+          <p className="display-font mt-3 text-3xl font-bold text-slate-700">â‚¹{offlineCollection.toLocaleString("en-IN")}</p>
+          <p className="mt-1 text-xs text-muted">Cash and bank entries</p>
+        </div>
+        <div className="surface rounded-3xl p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Salary Payable</p>
+          <p className="display-font mt-3 text-3xl font-bold text-amber-700">â‚¹{salaryPayable.toLocaleString("en-IN")}</p>
+          <p className="mt-1 text-xs text-muted">{salaryRecords.length} salary records</p>
+        </div>
+        <div className="surface rounded-3xl p-5 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Transactions</p>
+          <p className="display-font mt-3 text-3xl font-bold text-ink">{transactions.length}</p>
+          <p className="mt-1 text-xs text-muted">{transactions.filter((tx) => tx.status === "failed").length} failed</p>
         </div>
       </div>
 

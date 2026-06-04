@@ -28,7 +28,7 @@ import { ReportsDashboard } from "@/components/reports/reports-dashboard";
 import { SchoolOperationsPanel } from "@/components/operations/school-operations-panel";
 import { StudentDashboard } from "@/components/student/student-dashboard";
 import { SupportDock } from "@/components/support/support-dock";
-import type { User, UserCampusScope } from "@/lib/api";
+import type { User } from "@/lib/api";
 
 export type AppTab = "dashboard" | "modules" | "records" | "campus" | "attendance" | "operations" | "academics" | "fees" | "reports" | "student";
 type AppDomain = "command" | "suite" | "administration" | "governance" | "operations" | "academics" | "finance" | "learner";
@@ -125,41 +125,20 @@ const APP_NAV: NavItem[] = [
   },
 ];
 
-function hasCampusRole(user: User, roles: UserCampusScope["role"][]) {
-  return user.campuses?.some((campus) => roles.includes(campus.role)) ?? false;
-}
-
-function hasMembershipFlag(user: User, key: "can_manage_users" | "can_configure_attendance") {
-  return user.campuses?.some((campus) => Boolean(campus[key])) ?? false;
-}
-
 function canAccessTab(user: User, tab: AppTab) {
   if (tab === "modules") return true;
   if (user.role === "super_admin") return tab !== "student";
-  if (user.role === "student" || user.role === "parent") return tab === "student";
-  if (user.role === "teacher") return ["dashboard", "attendance", "operations", "academics"].includes(tab);
-  if (user.role !== "admin") return false;
-
-  const isItAdmin = hasCampusRole(user, ["it_admin"]);
-  const isAcademicAdmin = hasCampusRole(user, ["academic_admin"]);
-  const isFinanceAdmin = hasCampusRole(user, ["finance_admin"]);
-  const canManageUsers = hasMembershipFlag(user, "can_manage_users");
-  const canConfigureAttendance = hasMembershipFlag(user, "can_configure_attendance");
-
-  if (tab === "dashboard") return true;
-  if (tab === "records") return isItAdmin || isAcademicAdmin || canManageUsers;
-  if (tab === "campus") return isItAdmin || canManageUsers || canConfigureAttendance;
-  if (tab === "attendance") return isItAdmin || isAcademicAdmin || canConfigureAttendance;
-  if (tab === "operations") return true;
-  if (tab === "academics") return isItAdmin || isAcademicAdmin;
-  if (tab === "fees") return isItAdmin || isFinanceAdmin;
-  if (tab === "reports") return isItAdmin || isFinanceAdmin;
+  if (user.role === "student") return tab === "student";
+  if (user.role === "account") return ["dashboard", "fees", "reports"].includes(tab);
+  if (user.role === "teacher") return ["dashboard", "attendance", "operations", "academics", "reports"].includes(tab);
+  if (user.role === "admin") return tab !== "student";
   return false;
 }
 
 function roleDisplayName(user: User) {
   if (user.role === "super_admin") return "Super Admin";
-  if (user.role === "parent") return "Parent / Guardian";
+  if (user.role === "admin") return "School Admin";
+  if (user.role === "account") return "Account";
   return user.role
     .split("_")
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
@@ -168,9 +147,9 @@ function roleDisplayName(user: User) {
 
 function accessScopeLabel(user: User, navItems: NavItem[]) {
   if (user.role === "super_admin") return "You can manage the full institution and every campus.";
+  if (user.role === "account") return "You can manage school-scoped fees, payments, receipts, reminders, transactions, and salary records.";
   if (user.role === "teacher") return "You can manage attendance, class work, resources, and results for your classes.";
-  if (user.role === "student") return "You can view your attendance, work, results, fees, and admit cards.";
-  if (user.role === "parent") return "You can view linked student attendance, work, results, fees, transport, hostel, and school notices.";
+  if (user.role === "student") return "You can view your attendance, work, results, fees, admit cards, and parent view.";
   const scopes = user.campuses?.map((campus) => `${campus.code} ${campus.role.replace("_", " ")}`) ?? [];
   return scopes.length
     ? `You can use ${navItems.length} page${navItems.length === 1 ? "" : "s"} for ${scopes.join(", ")}.`
@@ -179,18 +158,18 @@ function accessScopeLabel(user: User, navItems: NavItem[]) {
 
 function accessPolicyLabel(user: User) {
   if (user.role === "super_admin") return "Full access";
-  if (user.role === "admin") return "Admin access";
+  if (user.role === "admin") return "School admin";
+  if (user.role === "account") return "Account access";
   if (user.role === "teacher") return "Teacher access";
-  if (user.role === "parent") return "Family view";
   return "Student view";
 }
 
 function personalizeNavItem(item: NavItem, user: User): NavItem {
-  if (user.role === "parent" && item.id === "student") {
+  if (user.role === "student" && item.id === "student") {
     return {
       ...item,
-      label: "Family Portal",
-      responsibility: "Linked student records and updates",
+      label: "Student Portal",
+      responsibility: "Student records and parent view",
     };
   }
   return item;
@@ -208,14 +187,14 @@ export function AppShell() {
   }, [user]);
 
   const allowedTabIds = useMemo(() => navItems.map((item) => item.id), [navItems]);
-  const defaultTab = user && (user.role === "student" || user.role === "parent")
+  const defaultTab = user && user.role === "student"
     ? navItems.find((item) => item.id === "student")?.id ?? navItems[0]?.id ?? ""
     : navItems[0]?.id ?? "";
   const currentTab = navItems.some((item) => item.id === activeTab) ? activeTab ?? "" : defaultTab;
   const canOpen = (tab: AppTab) => Boolean(user && currentTab === tab && canAccessTab(user, tab));
   const primaryCampus = user?.campuses?.find((campus) => campus.is_primary) ?? user?.campuses?.[0];
   const campusName = user?.role === "super_admin" ? "All campuses" : primaryCampus?.name ?? "Campus not assigned";
-  const accessMode = user?.role === "student" || user?.role === "parent" ? "Read-only" : "Operational";
+  const accessMode = user?.role === "student" ? "Read-only" : "Operational";
 
   if (loading) return <LoginPage />;
 
@@ -301,7 +280,7 @@ export function AppShell() {
           </section>
         )}
 
-        {currentTab === "dashboard" && (user.role === "admin" || user.role === "super_admin" || user.role === "teacher") && (
+        {currentTab === "dashboard" && (user.role === "admin" || user.role === "super_admin" || user.role === "teacher" || user.role === "account") && (
           <InstitutionOverview
             role={user.role}
             allowedTabs={allowedTabIds}

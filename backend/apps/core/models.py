@@ -16,12 +16,38 @@ class AuditModel(models.Model):
         abstract = True
 
 
+class SchoolStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    SUSPENDED = "suspended", "Suspended"
+
+
 class Campus(AuditModel):
     name = models.CharField(max_length=120)
     code = models.CharField(max_length=20, unique=True)
     address = models.TextField(blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=40, blank=True)
     logo_url = models.TextField(blank=True)
     logo_alt_text = models.CharField(max_length=160, blank=True)
+    banner_url = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=SchoolStatus.choices, default=SchoolStatus.ACTIVE)
+    subscription_plan = models.CharField(max_length=80, blank=True, default="Standard")
+    subscription_status = models.CharField(max_length=40, blank=True, default="active")
+    monthly_subscription_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    billing_due_date = models.DateField(null=True, blank=True)
+    academic_year_label = models.CharField(max_length=80, blank=True)
+    enabled_modules = models.JSONField(default=dict, blank=True)
+    payment_gateway_settings = models.JSONField(default=dict, blank=True)
+    messaging_settings = models.JSONField(default=dict, blank=True)
+    attendance_hardware_settings = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="campuses_created",
+    )
     database_alias = models.CharField(
         max_length=64,
         blank=True,
@@ -35,6 +61,10 @@ class Campus(AuditModel):
 
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["code", "status"]),
+            models.Index(fields=["subscription_status"]),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -140,15 +170,16 @@ class PaymentMethod(models.TextChoices):
     CARD = "card", "Card"
     BANK = "bank", "Bank"
     ONLINE = "online", "Online"
+    UPI = "upi", "UPI"
+    NET_BANKING = "net_banking", "Net banking"
+    WALLET = "wallet", "Wallet"
 
 
 class CampusMemberRole(models.TextChoices):
-    IT_ADMIN = "it_admin", "IT Admin"
-    ACADEMIC_ADMIN = "academic_admin", "Academic Admin"
-    FINANCE_ADMIN = "finance_admin", "Finance Admin"
-    HR_ADMIN = "hr_admin", "HR Admin"
+    IT_ADMIN = "it_admin", "School Admin"
+    FINANCE_ADMIN = "finance_admin", "Account"
     TEACHER = "teacher", "Teacher"
-    SUPPORT = "support", "Support"
+    SUPPORT = "support", "Student Portal"
 
 
 class AttendanceCaptureMethod(models.TextChoices):
@@ -222,7 +253,7 @@ class AnnouncementAudience(models.TextChoices):
     ALL = "all", "All users"
     ADMINS = "admins", "Admins"
     STAFF = "staff", "Teachers and staff"
-    LEARNERS = "learners", "Students and parents"
+    LEARNERS = "learners", "Students and parent view"
 
 
 class SupportTicketStatus(models.TextChoices):
@@ -510,8 +541,8 @@ class StaffAttendanceRecord(AuditModel):
     def clean(self) -> None:
         if self.device_id and self.campus_id and self.device.campus_id != self.campus_id:
             raise ValidationError({"device": "Attendance device must belong to the selected campus."})
-        if self.staff_user_id and getattr(self.staff_user, "role", None) in {"student", "parent"}:
-            raise ValidationError({"staff_user": "Staff attendance cannot be recorded for student or parent users."})
+        if self.staff_user_id and getattr(self.staff_user, "role", None) == "student":
+            raise ValidationError({"staff_user": "Staff attendance cannot be recorded for student users."})
 
 
 class StaffProfile(AuditModel):
@@ -549,7 +580,7 @@ class StaffProfile(AuditModel):
         return f"{self.employee_code} - {self.user}"
 
     def clean(self) -> None:
-        if self.user_id and getattr(self.user, "role", None) in {"student", "parent"}:
+        if self.user_id and getattr(self.user, "role", None) == "student":
             raise ValidationError({"user": "Staff profile users must be administrators or teachers."})
 
 
@@ -990,6 +1021,301 @@ class Payment(AuditModel):
         with transaction.atomic():
             super().save(*args, **kwargs)
             self.fee_assignment.refresh_status()
+
+
+class TransactionStatus(models.TextChoices):
+    CREATED = "created", "Created"
+    PENDING = "pending", "Pending"
+    SUCCESS = "success", "Success"
+    FAILED = "failed", "Failed"
+    REFUNDED = "refunded", "Refunded"
+
+
+class SalaryPaymentStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    PAYABLE = "payable", "Payable"
+    PAID = "paid", "Paid"
+    HOLD = "hold", "Hold"
+
+
+class MessageChannel(models.TextChoices):
+    EMAIL = "email", "Email"
+    SMS = "sms", "SMS"
+    WHATSAPP = "whatsapp", "WhatsApp"
+
+
+class MessageStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    QUEUED = "queued", "Queued"
+    SENT = "sent", "Sent"
+    FAILED = "failed", "Failed"
+
+
+class RecordStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    ARCHIVED = "archived", "Archived"
+
+
+class PaymentTransaction(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="payment_transactions")
+    student = models.ForeignKey(Student, on_delete=models.SET_NULL, null=True, blank=True, related_name="payment_transactions")
+    fee_assignment = models.ForeignKey(
+        FeeAssignment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transactions",
+    )
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
+    provider = models.CharField(max_length=40, default="razorpay")
+    method = models.CharField(max_length=32, choices=PaymentMethod.choices, default=PaymentMethod.ONLINE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=8, default="INR")
+    status = models.CharField(max_length=20, choices=TransactionStatus.choices, default=TransactionStatus.CREATED)
+    gateway_order_id = models.CharField(max_length=120, blank=True)
+    gateway_payment_id = models.CharField(max_length=120, blank=True)
+    gateway_signature = models.CharField(max_length=255, blank=True)
+    receipt_number = models.CharField(max_length=80, blank=True)
+    webhook_verified = models.BooleanField(default=False)
+    raw_payload = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_transactions_created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["campus", "status"]),
+            models.Index(fields=["gateway_order_id"]),
+            models.Index(fields=["gateway_payment_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider} {self.amount} {self.status}"
+
+    def clean(self) -> None:
+        if self.amount <= Decimal("0"):
+            raise ValidationError({"amount": "Transaction amount must be greater than zero."})
+        if self.student_id and self.student.campus_id != self.campus_id:
+            raise ValidationError({"student": "Student must belong to the transaction campus."})
+        if self.fee_assignment_id and self.fee_assignment.student.campus_id != self.campus_id:
+            raise ValidationError({"fee_assignment": "Fee assignment must belong to the transaction campus."})
+
+
+class SalaryRecord(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="salary_records")
+    staff_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="salary_records",
+    )
+    month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)])
+    year = models.PositiveIntegerField(validators=[MinValueValidator(2000), MaxValueValidator(2100)])
+    present_days = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    absent_days = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    leave_days = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    half_days = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
+    gross_salary = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    deductions = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    bonus = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    final_salary = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    payment_status = models.CharField(max_length=20, choices=SalaryPaymentStatus.choices, default=SalaryPaymentStatus.DRAFT)
+    paid_on = models.DateField(null=True, blank=True)
+    slip_url = models.URLField(blank=True)
+    status = models.CharField(max_length=20, choices=RecordStatus.choices, default=RecordStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="salary_records_created",
+    )
+
+    class Meta:
+        ordering = ["-year", "-month", "staff_user__username"]
+        unique_together = ("campus", "staff_user", "month", "year")
+        indexes = [
+            models.Index(fields=["campus", "year", "month"]),
+            models.Index(fields=["staff_user", "payment_status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.staff_user} salary {self.month}/{self.year}"
+
+    def clean(self) -> None:
+        if getattr(self.staff_user, "role", None) == "student":
+            raise ValidationError({"staff_user": "Salary records cannot be created for student users."})
+        if min(self.present_days, self.absent_days, self.leave_days, self.half_days, self.gross_salary, self.deductions, self.bonus, self.final_salary) < Decimal("0"):
+            raise ValidationError("Salary values cannot be negative.")
+
+
+class MessageTemplate(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, null=True, blank=True, related_name="message_templates")
+    name = models.CharField(max_length=120)
+    trigger = models.CharField(max_length=80)
+    channel = models.CharField(max_length=20, choices=MessageChannel.choices)
+    subject = models.CharField(max_length=160, blank=True)
+    body = models.TextField()
+    variables = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=20, choices=RecordStatus.choices, default=RecordStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="message_templates_created",
+    )
+
+    class Meta:
+        ordering = ["campus__name", "channel", "name"]
+        unique_together = ("campus", "name", "channel")
+        indexes = [
+            models.Index(fields=["campus", "channel", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.channel})"
+
+
+class OutboundMessage(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="outbound_messages")
+    template = models.ForeignKey(MessageTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name="messages")
+    recipient_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="messages_received",
+    )
+    student = models.ForeignKey(Student, on_delete=models.SET_NULL, null=True, blank=True, related_name="messages")
+    channel = models.CharField(max_length=20, choices=MessageChannel.choices)
+    recipient = models.CharField(max_length=180)
+    subject = models.CharField(max_length=160, blank=True)
+    body = models.TextField()
+    status = models.CharField(max_length=20, choices=MessageStatus.choices, default=MessageStatus.QUEUED)
+    provider = models.CharField(max_length=80, blank=True)
+    provider_reference = models.CharField(max_length=160, blank=True)
+    error_message = models.TextField(blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="messages_created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["campus", "channel", "status"]),
+            models.Index(fields=["recipient_user", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.channel} to {self.recipient}"
+
+    def clean(self) -> None:
+        if self.student_id and self.student.campus_id != self.campus_id:
+            raise ValidationError({"student": "Student must belong to the message campus."})
+        if self.template_id and self.template.campus_id and self.template.campus_id != self.campus_id:
+            raise ValidationError({"template": "Template must belong to the message campus or be global."})
+
+
+class AILog(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, null=True, blank=True, related_name="ai_logs")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="ai_logs")
+    role = models.CharField(max_length=32)
+    feature = models.CharField(max_length=80)
+    prompt = models.TextField()
+    response = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=RecordStatus.choices, default=RecordStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_logs_created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["campus", "role", "feature"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.role} AI - {self.feature}"
+
+
+class Document(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, related_name="documents")
+    student = models.ForeignKey(Student, on_delete=models.SET_NULL, null=True, blank=True, related_name="documents")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents_uploaded",
+    )
+    title = models.CharField(max_length=160)
+    document_type = models.CharField(max_length=80)
+    file_url = models.URLField()
+    status = models.CharField(max_length=20, choices=RecordStatus.choices, default=RecordStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents_created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["campus", "document_type", "status"]),
+            models.Index(fields=["student", "document_type"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.title
+
+    def clean(self) -> None:
+        if self.student_id and self.student.campus_id != self.campus_id:
+            raise ValidationError({"student": "Document student must belong to the selected campus."})
+
+
+class PlatformSetting(AuditModel):
+    campus = models.ForeignKey(Campus, on_delete=models.CASCADE, null=True, blank=True, related_name="settings")
+    key = models.CharField(max_length=120)
+    value = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=RecordStatus.choices, default=RecordStatus.ACTIVE)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="platform_settings_created",
+    )
+
+    class Meta:
+        ordering = ["campus__name", "key"]
+        unique_together = ("campus", "key")
+        indexes = [
+            models.Index(fields=["campus", "status"]),
+            models.Index(fields=["key"]),
+        ]
+
+    def __str__(self) -> str:
+        scope = self.campus.code if self.campus_id else "global"
+        return f"{scope}:{self.key}"
 
 
 class ApprovalRequest(AuditModel):

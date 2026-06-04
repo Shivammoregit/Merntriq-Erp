@@ -24,7 +24,7 @@ For fast local execution without PostgreSQL:
 $env:DJANGO_USE_SQLITE='True'
 Set-Location backend
 ..\.backend-venv\Scripts\python.exe manage.py migrate
-..\.backend-venv\Scripts\python.exe manage.py seed_demo
+..\.backend-venv\Scripts\python.exe manage.py createsuperuser
 ..\.backend-venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
 ```
 
@@ -46,30 +46,20 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-## 4. Demo Data
+## 4. Authorized Account Setup
 
-Run:
+Create the first Super Admin through Django's protected management command:
 
 ```powershell
 Set-Location backend
-$env:DJANGO_USE_SQLITE='True'
-..\.backend-venv\Scripts\python.exe manage.py seed_demo
+..\.backend-venv\Scripts\python.exe manage.py createsuperuser
 ```
 
-Credentials:
-
-- `super.admin / Mentriq@123` - all campuses and support issue queue
-- `it.admin / Mentriq@123` - Main Campus IT admin
-- `north.admin / Mentriq@123` - North Campus IT admin
-- `academic.admin / Mentriq@123` - academic records and exam workflows
-- `finance.admin / Mentriq@123` - fees and payment workflows
-- `teacher.meera / Mentriq@123` - assigned class access
-- `teacher.dev / Mentriq@123` - North Campus assigned class access
-- `student.anaya / Mentriq@123` - own profile only
+After the Super Admin signs in, create School Admin, Account, Teacher, and Student users from the admin workspace. Do not commit or publish real user names, temporary passwords, or imported credential files.
 
 ## 5. Module Execution Order
 
-1. Login with an admin user.
+1. Login with an authorized Super Admin or School Admin user.
 2. Create campus and academic session records.
 3. Create sections and assign class teachers.
 4. Add students and guardian contact details.
@@ -126,4 +116,4 @@ pnpm build
 - Serve the frontend over HTTPS.
 - Use `config.settings.production`.
 - Run `python manage.py migrate`.
-- Create a real super admin and remove demo users if seeded.
+- Create the first Super Admin with `python manage.py createsuperuser`.

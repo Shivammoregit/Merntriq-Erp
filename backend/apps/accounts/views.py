@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -65,6 +66,25 @@ class CurrentUserView(APIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
+    def patch(self, request):
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        # Log profile update event
+        AuditEvent.objects.create(
+            actor=request.user,
+            action=AuditAction.UPDATE,
+            entity_type="User",
+            entity_id=str(request.user.pk),
+            summary="User updated own profile details",
+            ip_address=get_client_ip(request),
+        )
+        return Response(serializer.data)
+
+    def put(self, request):
+        return self.patch(request)
+
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -73,7 +93,7 @@ class UserViewSet(viewsets.ModelViewSet):
     read_roles = ADMIN_ROLES
     write_roles = ADMIN_ROLES
     filterset_fields = ("role", "is_active")
-    search_fields = ("username", "first_name", "last_name", "email")
+    search_fields = ("username", "first_name", "last_name", "email", "phone_number", "city", "state")
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -87,3 +107,26 @@ class UserViewSet(viewsets.ModelViewSet):
                 .distinct()
             )
         return queryset
+
+    @action(detail=True, methods=["get"], url_path="detail")
+    def detail_view(self, request, pk=None):
+        user = self.get_object()
+        user_data = self.get_serializer(user).data
+
+        # Get recent audit events where this user was the actor
+        recent_events = AuditEvent.objects.filter(actor=user)[:50]
+        audit_events = [
+            {
+                "id": event.id,
+                "action": event.action,
+                "entity_type": event.entity_type,
+                "entity_id": event.entity_id,
+                "summary": event.summary,
+                "ip_address": event.ip_address,
+                "created_at": event.created_at,
+            }
+            for event in recent_events
+        ]
+
+        user_data["audit_events"] = audit_events
+        return Response(user_data)

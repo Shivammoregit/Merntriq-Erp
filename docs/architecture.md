@@ -35,7 +35,7 @@ User logs in
 
 ## Multi-Tenant Databases
 
-Campus isolation is enabled by `CAMPUS_DATABASE_URLS`. Each `CAMPUS_CODE=database_url` entry creates a Django database alias such as `campus_m360_main`. Requests that include `X-Campus-Code` are routed through `CampusTenantMiddleware` and `CampusTenantRouter` so ERP reads and writes use that campus database. Without a campus code, the default database is used for central/demo operation.
+Campus isolation is enabled by `CAMPUS_DATABASE_URLS`. Each `CAMPUS_CODE=database_url` entry creates a Django database alias such as `campus_m360_main`. Requests that include `X-Campus-Code` are routed through `CampusTenantMiddleware` and `CampusTenantRouter` so ERP reads and writes use that campus database. Without a campus code, the default database is used for central operation.
 
 Tenant selection can come from `X-Campus-Code`, the `campus_code` query parameter, or an optional subdomain suffix configured with `DJANGO_TENANT_DOMAIN_SUFFIX` and `NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX`. For example, `north.schools.example.com` resolves to campus code `NORTH` when the suffix is `schools.example.com`. Shared-database deployments should leave these suffix/default tenant settings blank.
 

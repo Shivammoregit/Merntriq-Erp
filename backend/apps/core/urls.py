@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AcademicSessionViewSet,
     AdmitCardViewSet,
+    AILogViewSet,
     AssignedWorkViewSet,
     AnnouncementViewSet,
     ApprovalRequestViewSet,
@@ -13,6 +14,7 @@ from .views import (
     CampusViewSet,
     CampusMembershipViewSet,
     ClassSectionViewSet,
+    DocumentViewSet,
     DashboardSummaryView,
     FeeAssignmentViewSet,
     HealthCheckView,
@@ -21,8 +23,13 @@ from .views import (
     LibraryBookViewSet,
     LibraryLoanViewSet,
     LearningResourceViewSet,
+    MessageTemplateViewSet,
+    OutboundMessageViewSet,
     PaymentViewSet,
+    PaymentTransactionViewSet,
+    PlatformSettingViewSet,
     ResultRecordViewSet,
+    SalaryRecordViewSet,
     StaffAttendanceRecordViewSet,
     StaffProfileViewSet,
     StudentGuardianViewSet,
@@ -64,6 +71,13 @@ router.register("result-records", ResultRecordViewSet, basename="result-record")
 router.register("admit-cards", AdmitCardViewSet, basename="admit-card")
 router.register("fee-assignments", FeeAssignmentViewSet, basename="fee-assignment")
 router.register("payments", PaymentViewSet, basename="payment")
+router.register("payment-transactions", PaymentTransactionViewSet, basename="payment-transaction")
+router.register("salary-records", SalaryRecordViewSet, basename="salary-record")
+router.register("message-templates", MessageTemplateViewSet, basename="message-template")
+router.register("outbound-messages", OutboundMessageViewSet, basename="outbound-message")
+router.register("ai-logs", AILogViewSet, basename="ai-log")
+router.register("documents", DocumentViewSet, basename="document")
+router.register("platform-settings", PlatformSettingViewSet, basename="platform-setting")
 router.register("audit-events", AuditEventViewSet, basename="audit-event")
 
 urlpatterns = [

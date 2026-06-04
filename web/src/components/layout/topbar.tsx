@@ -32,9 +32,9 @@ import {
 const ROLE_COLOUR: Record<string, string> = {
   super_admin: "border-emerald-200 bg-emerald-50 text-emerald-700",
   admin: "border-blue-200 bg-blue-50 text-blue-700",
+  account: "border-emerald-200 bg-emerald-50 text-emerald-700",
   teacher: "border-slate-200 bg-slate-50 text-slate-700",
   student: "border-slate-200 bg-slate-50 text-slate-700",
-  parent: "border-teal-200 bg-teal-50 text-teal-700",
 };
 
 const FAQ_ITEMS = [
@@ -52,7 +52,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "Where can I check attendance, fees, homework, and results?",
-    answer: "Students and parents can open the learner portal. Staff can use Attendance, Pay Online, LMS, and Examination modules according to their role.",
+    answer: "Students use the learner portal, including the parent view. Staff use Attendance, Pay Online, LMS, and Examination modules according to their role.",
   },
   {
     question: "How can I send a problem or message to support?",
@@ -83,10 +83,10 @@ type NotificationItem = {
 
 function accessLabel(role?: string) {
   if (role === "super_admin") return "Full access";
-  if (role === "admin") return "Admin access";
+  if (role === "admin") return "School admin";
+  if (role === "account") return "Account access";
   if (role === "teacher") return "Teacher access";
   if (role === "student") return "Student view";
-  if (role === "parent") return "Family view";
   return "Limited access";
 }
 
@@ -246,11 +246,11 @@ export function Topbar({
       });
     }
 
-    if (currentRole === "student" || currentRole === "parent") {
+    if (currentRole === "student") {
       items.push({
         id: "learner-updates",
-        title: currentRole === "parent" ? "Family records available" : "Learner records available",
-        message: "Attendance, assigned work, results, resources, transport, hostel, and admit cards are available in the learner portal.",
+        title: "Student and parent view available",
+        message: "Attendance, assigned work, results, resources, fees, and admit cards are available in the student portal.",
         priority: "normal",
         time: "Today",
         icon: Info,

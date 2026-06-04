@@ -25,7 +25,6 @@ from apps.core.models import (
     LearningResource,
     ResultRecord,
     Student,
-    StudentGuardian,
     SupportTicket,
     TeacherSubjectAllocation,
 )
@@ -103,11 +102,6 @@ class ERPRoleFlowTests(APITestCase):
             password="Passw0rd!123",
             role=UserRole.TEACHER,
         )
-        self.parent = User.objects.create_user(
-            username="parent",
-            password="Passw0rd!123",
-            role=UserRole.PARENT,
-        )
         self.student_user = User.objects.create_user(
             username="student",
             password="Passw0rd!123",
@@ -170,7 +164,6 @@ class ERPRoleFlowTests(APITestCase):
             last_name="Kapoor",
             date_of_birth=date(2015, 7, 18),
         )
-        StudentGuardian.objects.create(student=self.student, guardian=self.parent)
         AttendanceRecord.objects.create(
             student=self.student,
             section=self.section,
@@ -269,8 +262,8 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(response.data["rs485_function"], "software")
         self.assertEqual(response.data["configured_by"], self.admin.id)
 
-    def test_parent_can_read_linked_student_workspace_only(self):
-        self.authenticate(self.parent)
+    def test_student_parent_view_can_read_own_workspace_only(self):
+        self.authenticate(self.student_user)
 
         students_response = self.client.get("/api/v1/students/")
         attendance_response = self.client.get("/api/v1/attendance-records/")
@@ -281,7 +274,7 @@ class ERPRoleFlowTests(APITestCase):
             {
                 "campus": self.campus.id,
                 "section": self.section.id,
-                "admission_number": "ADM-PARENT-BLOCKED",
+                "admission_number": "ADM-STUDENT-BLOCKED",
                 "first_name": "Blocked",
                 "last_name": "Student",
                 "date_of_birth": "2015-05-10",
@@ -508,7 +501,7 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(len(admit_cards_response.data), 1)
         self.assertEqual(write_response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_admin_can_manage_operations_and_parent_can_read_linked_services(self):
+    def test_admin_can_manage_operations_and_student_can_read_own_services(self):
         self.authenticate(self.admin)
 
         staff_response = self.client.post(
@@ -655,22 +648,22 @@ class ERPRoleFlowTests(APITestCase):
         ):
             self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
-        self.authenticate(self.parent)
-        parent_slots = self.client.get("/api/v1/timetable-slots/")
-        parent_loans = self.client.get("/api/v1/library-loans/")
-        parent_transport = self.client.get("/api/v1/student-transport-assignments/")
-        parent_hostel = self.client.get("/api/v1/hostel-allocations/")
-        parent_staff = self.client.get("/api/v1/staff-profiles/")
+        self.authenticate(self.student_user)
+        student_slots = self.client.get("/api/v1/timetable-slots/")
+        student_loans = self.client.get("/api/v1/library-loans/")
+        student_transport = self.client.get("/api/v1/student-transport-assignments/")
+        student_hostel = self.client.get("/api/v1/hostel-allocations/")
+        student_staff = self.client.get("/api/v1/staff-profiles/")
 
-        self.assertEqual(parent_slots.status_code, status.HTTP_200_OK)
-        self.assertEqual(parent_loans.status_code, status.HTTP_200_OK)
-        self.assertEqual(parent_transport.status_code, status.HTTP_200_OK)
-        self.assertEqual(parent_hostel.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(parent_slots.data), 1)
-        self.assertEqual(len(parent_loans.data), 1)
-        self.assertEqual(len(parent_transport.data), 1)
-        self.assertEqual(len(parent_hostel.data), 1)
-        self.assertEqual(parent_staff.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(student_slots.status_code, status.HTTP_200_OK)
+        self.assertEqual(student_loans.status_code, status.HTTP_200_OK)
+        self.assertEqual(student_transport.status_code, status.HTTP_200_OK)
+        self.assertEqual(student_hostel.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(student_slots.data), 1)
+        self.assertEqual(len(student_loans.data), 1)
+        self.assertEqual(len(student_transport.data), 1)
+        self.assertEqual(len(student_hostel.data), 1)
+        self.assertEqual(student_staff.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_announcements_are_visible_by_audience(self):
         Announcement.objects.create(title="All notice", message="For everyone", audience="all", created_by=self.admin)
@@ -691,14 +684,6 @@ class ERPRoleFlowTests(APITestCase):
         self.assertEqual(student_response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             {item["title"] for item in student_response.data},
-            {"All notice", "Learner notice"},
-        )
-
-        self.authenticate(self.parent)
-        parent_response = self.client.get("/api/v1/announcements/")
-        self.assertEqual(parent_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            {item["title"] for item in parent_response.data},
             {"All notice", "Learner notice"},
         )
 
@@ -735,7 +720,7 @@ class ERPRoleFlowTests(APITestCase):
 
         resolve_response = self.client.patch(
             f"/api/v1/support-tickets/{ticket_id}/",
-            {"status": "resolved", "response_note": "Shared with IT admin."},
+            {"status": "resolved", "response_note": "Shared with School Admin."},
             format="json",
         )
         self.assertEqual(resolve_response.status_code, status.HTTP_200_OK)

@@ -199,6 +199,12 @@ export function InstitutionOverview({
         title: "Class duties",
         action: "Open Class Work",
       }
+    : role === "account"
+      ? {
+          label: "Account workspace",
+          title: "Finance control",
+          action: "Open Finance",
+        }
     : role === "super_admin"
       ? {
           label: "Director workspace",

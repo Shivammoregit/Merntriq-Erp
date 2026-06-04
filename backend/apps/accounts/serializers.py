@@ -8,6 +8,8 @@ from .models import User, UserRole
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     campuses = serializers.SerializerMethodField()
+    linked_student_profile = serializers.SerializerMethodField()
+    linked_staff_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -19,8 +21,23 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "full_name",
             "role",
+            "phone_number",
             "campuses",
             "is_active",
+            "gender",
+            "date_of_birth",
+            "address",
+            "city",
+            "state",
+            "pincode",
+            "blood_group",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "qualification",
+            "profile_photo_url",
+            "bio",
+            "linked_student_profile",
+            "linked_staff_profile",
         )
 
     def get_full_name(self, obj: User) -> str:
@@ -45,6 +62,34 @@ class UserSerializer(serializers.ModelSerializer):
             for membership in memberships.select_related("campus").all()
         ]
 
+    def get_linked_student_profile(self, obj: User) -> dict | None:
+        try:
+            student = obj.student_profile
+            return {
+                "id": student.id,
+                "admission_number": student.admission_number,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "grade_name": student.section.grade_name if student.section else "",
+                "section_name": student.section.section_name if student.section else "",
+                "status": student.status,
+            }
+        except Exception:
+            return None
+
+    def get_linked_staff_profile(self, obj: User) -> dict | None:
+        try:
+            staff = obj.staff_profile
+            return {
+                "id": staff.id,
+                "employee_code": staff.employee_code,
+                "designation": staff.designation,
+                "department": staff.department,
+                "status": staff.status,
+            }
+        except Exception:
+            return None
+
 
 class UserAdminSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
@@ -56,6 +101,8 @@ class UserAdminSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True,
     )
+    linked_student_profile = serializers.SerializerMethodField()
+    linked_staff_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -74,10 +121,52 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "is_active",
             "is_staff",
             "password",
+            "gender",
+            "date_of_birth",
+            "address",
+            "city",
+            "state",
+            "pincode",
+            "blood_group",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "qualification",
+            "profile_photo_url",
+            "bio",
+            "linked_student_profile",
+            "linked_staff_profile",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("created_at", "updated_at")
+
+    def get_linked_student_profile(self, obj: User) -> dict | None:
+        try:
+            student = obj.student_profile
+            return {
+                "id": student.id,
+                "admission_number": student.admission_number,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "grade_name": student.section.grade_name if student.section else "",
+                "section_name": student.section.section_name if student.section else "",
+                "status": student.status,
+            }
+        except Exception:
+            return None
+
+    def get_linked_staff_profile(self, obj: User) -> dict | None:
+        try:
+            staff = obj.staff_profile
+            return {
+                "id": staff.id,
+                "employee_code": staff.employee_code,
+                "designation": staff.designation,
+                "department": staff.department,
+                "status": staff.status,
+            }
+        except Exception:
+            return None
 
     def get_full_name(self, obj: User) -> str:
         return obj.get_full_name() or obj.username
@@ -133,9 +222,9 @@ class UserAdminSerializer(serializers.ModelSerializer):
         CampusMembership.objects.filter(user=user).delete()
         role_map = {
             UserRole.ADMIN: CampusMemberRole.IT_ADMIN,
+            UserRole.ACCOUNT: CampusMemberRole.FINANCE_ADMIN,
             UserRole.TEACHER: CampusMemberRole.TEACHER,
             UserRole.STUDENT: CampusMemberRole.SUPPORT,
-            UserRole.PARENT: CampusMemberRole.SUPPORT,
         }
         membership_role = role_map.get(user.role, CampusMemberRole.SUPPORT)
         for index, campus_id in enumerate(dict.fromkeys(campus_ids)):

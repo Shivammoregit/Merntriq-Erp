@@ -18,13 +18,13 @@ class IsAdminUserRole(HasRole):
     allowed_roles = (UserRole.SUPER_ADMIN, UserRole.ADMIN)
 
 
+class IsAccountUserRole(HasRole):
+    allowed_roles = (UserRole.ACCOUNT,)
+
+
 class IsTeacherUserRole(HasRole):
     allowed_roles = (UserRole.TEACHER,)
 
 
 class IsStudentUserRole(HasRole):
     allowed_roles = (UserRole.STUDENT,)
-
-
-class IsParentUserRole(HasRole):
-    allowed_roles = (UserRole.PARENT,)

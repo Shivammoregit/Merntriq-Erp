@@ -3,8 +3,8 @@
  * All backend calls go through this module so token management is centralised.
  */
 
-const DEFAULT_API_BASE = "http://localhost:8000/api/v1";
 const CONFIGURED_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+const LOCAL_API_PORT = process.env.NEXT_PUBLIC_LOCAL_API_PORT ?? "8000";
 const configuredTimeout = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? "60000");
 const REQUEST_TIMEOUT_MS = Number.isFinite(configuredTimeout) ? Math.max(configuredTimeout, 60000) : 60000;
 export const SESSION_EXPIRED_EVENT = "mentriq360-session-expired";
@@ -18,25 +18,24 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
+function localApiBase(hostname = "localhost") {
+  const host = hostname === "[::1]" || hostname === "::1" ? "[::1]" : hostname;
+  return `http://${host}:${LOCAL_API_PORT}/api/v1`;
+}
+
 function getApiBase() {
-  const configuredBase = trimTrailingSlash(CONFIGURED_API_BASE || DEFAULT_API_BASE);
-  if (typeof window === "undefined") return configuredBase;
+  if (CONFIGURED_API_BASE) return trimTrailingSlash(CONFIGURED_API_BASE);
+  if (typeof window === "undefined") return localApiBase();
 
   try {
-    const apiUrl = new URL(configuredBase);
     const pageHost = window.location.hostname;
-
-    if (!CONFIGURED_API_BASE && window.location.protocol === "https:" && LOOPBACK_HOSTS.has(apiUrl.hostname)) {
-      return "/api/v1";
+    if (LOOPBACK_HOSTS.has(pageHost)) return localApiBase(pageHost);
+    if (window.location.protocol === "http:" && window.location.port) {
+      return localApiBase(pageHost);
     }
-
-    if (pageHost && !LOOPBACK_HOSTS.has(pageHost) && LOOPBACK_HOSTS.has(apiUrl.hostname)) {
-      apiUrl.hostname = pageHost;
-    }
-
-    return trimTrailingSlash(apiUrl.toString());
+    return "/api/v1";
   } catch {
-    return configuredBase;
+    return localApiBase();
   }
 }
 
@@ -218,7 +217,7 @@ export class ApiError extends Error {
 }
 
 // ─── Type definitions ─────────────────────────────────────────────────────────
-export type UserRole = "super_admin" | "admin" | "teacher" | "student" | "parent";
+export type UserRole = "super_admin" | "admin" | "account" | "teacher" | "student";
 
 export interface User {
   id: number;
@@ -228,17 +227,66 @@ export interface User {
   last_name: string;
   full_name: string;
   role: UserRole;
+  phone_number: string;
+  gender: string;
+  date_of_birth: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  blood_group: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  qualification: string;
+  profile_photo_url: string;
+  bio: string;
   campuses?: UserCampusScope[];
   is_active: boolean;
 }
 
 export interface ERPUser extends User {
-  phone_number: string;
   must_change_password: boolean;
   is_staff: boolean;
   campuses?: UserCampusScope[];
   created_at: string;
   updated_at: string;
+}
+
+export interface LinkedStudent {
+  id: number;
+  admission_number: string;
+  full_name: string;
+  section: string;
+  campus: string;
+  status: string;
+  date_of_birth: string;
+  father_name: string;
+  mother_name: string;
+}
+
+export interface LinkedStaff {
+  id: number;
+  employee_code: string;
+  designation: string;
+  department: string;
+  employment_type: string;
+  joining_date: string;
+  qualification: string;
+  campus: string;
+  status: string;
+}
+
+export interface UserActivityEvent {
+  action: string;
+  entity_type: string;
+  summary: string;
+  created_at: string;
+}
+
+export interface UserDetail extends ERPUser {
+  linked_student: LinkedStudent | null;
+  linked_staff: LinkedStaff | null;
+  recent_activity: UserActivityEvent[];
 }
 
 export interface UserCampusScope {
@@ -271,8 +319,22 @@ export interface Campus {
   name: string;
   code: string;
   address: string;
+  contact_email?: string;
+  contact_phone?: string;
   logo_url?: string;
   logo_alt_text?: string;
+  banner_url?: string;
+  status?: "active" | "inactive" | "suspended";
+  subscription_plan?: string;
+  subscription_status?: string;
+  monthly_subscription_amount?: string;
+  billing_due_date?: string | null;
+  academic_year_label?: string;
+  enabled_modules?: Record<string, boolean>;
+  payment_gateway_settings?: Record<string, unknown>;
+  messaging_settings?: Record<string, unknown>;
+  attendance_hardware_settings?: Record<string, unknown>;
+  created_by?: number | null;
   database_alias?: string;
   database_name?: string;
   created_at?: string;
@@ -281,9 +343,7 @@ export interface Campus {
 
 export type CampusMemberRole =
   | "it_admin"
-  | "academic_admin"
   | "finance_admin"
-  | "hr_admin"
   | "teacher"
   | "support";
 
@@ -701,7 +761,7 @@ export interface FeeAssignment {
   updated_at?: string;
 }
 
-export type PaymentMethod = "cash" | "card" | "bank" | "online";
+export type PaymentMethod = "cash" | "card" | "bank" | "online" | "upi" | "net_banking" | "wallet";
 
 export interface Payment {
   id: number;
@@ -713,6 +773,157 @@ export interface Payment {
   payment_method: PaymentMethod;
   reference_number: string;
   collected_by: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TransactionStatus = "created" | "pending" | "success" | "failed" | "refunded";
+
+export interface PaymentTransaction {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  student: number | null;
+  student_name?: string;
+  fee_assignment: number | null;
+  fee_title?: string;
+  payment: number | null;
+  provider: string;
+  method: PaymentMethod;
+  amount: string;
+  currency: string;
+  status: TransactionStatus;
+  gateway_order_id: string;
+  gateway_payment_id: string;
+  gateway_signature: string;
+  receipt_number: string;
+  webhook_verified: boolean;
+  raw_payload: Record<string, unknown>;
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type SalaryPaymentStatus = "draft" | "payable" | "paid" | "hold";
+
+export interface SalaryRecord {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  staff_user: number;
+  staff_name?: string;
+  staff_role?: UserRole;
+  month: number;
+  year: number;
+  present_days: string;
+  absent_days: string;
+  leave_days: string;
+  half_days: string;
+  gross_salary: string;
+  deductions: string;
+  bonus: string;
+  final_salary: string;
+  payment_status: SalaryPaymentStatus;
+  paid_on: string | null;
+  slip_url: string;
+  status: "active" | "inactive" | "archived";
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type MessageChannel = "email" | "sms" | "whatsapp";
+export type MessageStatus = "draft" | "queued" | "sent" | "failed";
+
+export interface MessageTemplate {
+  id: number;
+  campus: number | null;
+  campus_name?: string;
+  name: string;
+  trigger: string;
+  channel: MessageChannel;
+  subject: string;
+  body: string;
+  variables: string[];
+  status: "active" | "inactive" | "archived";
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OutboundMessage {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  template: number | null;
+  template_name?: string;
+  recipient_user: number | null;
+  recipient_user_name?: string;
+  student: number | null;
+  student_name?: string;
+  channel: MessageChannel;
+  recipient: string;
+  subject: string;
+  body: string;
+  status: MessageStatus;
+  provider: string;
+  provider_reference: string;
+  error_message: string;
+  sent_at: string | null;
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AILog {
+  id: number;
+  campus: number | null;
+  campus_name?: string;
+  user: number | null;
+  user_name?: string;
+  role: UserRole;
+  feature: string;
+  prompt: string;
+  response: string;
+  metadata: Record<string, unknown>;
+  status: "active" | "inactive" | "archived";
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DocumentRecord {
+  id: number;
+  campus: number;
+  campus_name?: string;
+  student: number | null;
+  student_name?: string;
+  uploaded_by: number | null;
+  uploaded_by_name?: string;
+  title: string;
+  document_type: string;
+  file_url: string;
+  status: "active" | "inactive" | "archived";
+  created_by: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PlatformSetting {
+  id: number;
+  campus: number | null;
+  campus_name?: string;
+  key: string;
+  value: Record<string, unknown>;
+  status: "active" | "inactive" | "archived";
+  created_by: number | null;
+  created_by_name?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -793,6 +1004,20 @@ export interface DashboardSummary {
     total: number;
     active: number;
   };
+  schools?: {
+    total: number;
+    active: number;
+    inactive: number;
+    suspended: number;
+    subscription_due: number;
+  };
+  users?: {
+    total: number;
+    teachers: number;
+    accounts: number;
+    school_admins: number;
+    active: number;
+  };
   attendance: {
     total: number;
     by_status: Partial<Record<AttendanceStatus, number>>;
@@ -808,7 +1033,15 @@ export interface DashboardSummary {
     total_assigned: string;
     total_collected: string;
     total_outstanding: string;
+    monthly_subscriptions?: string;
+    pending_school_payments?: number;
+    salary_payable?: string;
     by_status: Partial<Record<FeeStatus, number>>;
+  };
+  staff?: {
+    total: number;
+    active: number;
+    teachers: number;
   };
   staff_attendance?: {
     total: number;
@@ -862,6 +1095,8 @@ export const userApi = {
     const q = params ? "?" + new URLSearchParams(params).toString() : "";
     return apiFetch<ERPUser[]>(`${getAuthBase()}/users/${q}`);
   },
+  detail: (id: number) =>
+    apiFetch<UserDetail>(`${getAuthBase()}/users/${id}/detail/`),
   create: (data: Partial<ERPUser> & { username: string; password?: string; role: UserRole; campus_ids?: number[] }) =>
     apiFetch<ERPUser>(`${getAuthBase()}/users/`, { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: Partial<ERPUser> & { password?: string; campus_ids?: number[] }) =>
@@ -873,10 +1108,14 @@ export const userApi = {
 export const campusApi = {
   list: () => apiFetch<Campus[]>("/campuses/"),
   get: (id: number) => apiFetch<Campus>(`/campuses/${id}/`),
-  create: (data: Pick<Campus, "name" | "code"> & Partial<Pick<Campus, "address" | "logo_url" | "logo_alt_text" | "database_alias" | "database_name">>) =>
+  create: (data: Pick<Campus, "name" | "code"> & Partial<Campus>) =>
     apiFetch<Campus>("/campuses/", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Campus>) =>
     apiFetch<Campus>(`/campuses/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  activate: (id: number) =>
+    apiFetch<Campus>(`/campuses/${id}/activate/`, { method: "POST", body: JSON.stringify({}) }),
+  suspend: (id: number) =>
+    apiFetch<Campus>(`/campuses/${id}/suspend/`, { method: "POST", body: JSON.stringify({}) }),
   remove: (id: number) => apiFetch<void>(`/campuses/${id}/`, { method: "DELETE" }),
 };
 
@@ -1227,6 +1466,85 @@ export const paymentApi = {
   },
   create: (data: Omit<Payment, "id" | "collected_by">) =>
     apiFetch<Payment>("/payments/", { method: "POST", body: JSON.stringify(data) }),
+};
+
+export const paymentTransactionApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<PaymentTransaction[]>(`/payment-transactions/${q}`);
+  },
+  create: (data: Omit<PaymentTransaction, "id" | "campus_name" | "student_name" | "fee_title" | "created_by" | "created_by_name" | "created_at" | "updated_at">) =>
+    apiFetch<PaymentTransaction>("/payment-transactions/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<PaymentTransaction>) =>
+    apiFetch<PaymentTransaction>(`/payment-transactions/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  verifyRazorpay: (id: number, data: Partial<Pick<PaymentTransaction, "gateway_order_id" | "gateway_payment_id" | "gateway_signature">> & { key_secret?: string }) =>
+    apiFetch<PaymentTransaction>(`/payment-transactions/${id}/verify-razorpay/`, { method: "POST", body: JSON.stringify(data) }),
+};
+
+export const salaryRecordApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<SalaryRecord[]>(`/salary-records/${q}`);
+  },
+  create: (data: Omit<SalaryRecord, "id" | "campus_name" | "staff_name" | "staff_role" | "created_by" | "created_by_name" | "created_at" | "updated_at">) =>
+    apiFetch<SalaryRecord>("/salary-records/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<SalaryRecord>) =>
+    apiFetch<SalaryRecord>(`/salary-records/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  markPaid: (id: number, paid_on?: string) =>
+    apiFetch<SalaryRecord>(`/salary-records/${id}/mark-paid/`, { method: "POST", body: JSON.stringify({ paid_on }) }),
+};
+
+export const messageTemplateApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<MessageTemplate[]>(`/message-templates/${q}`);
+  },
+  create: (data: Omit<MessageTemplate, "id" | "campus_name" | "created_by" | "created_by_name" | "created_at" | "updated_at">) =>
+    apiFetch<MessageTemplate>("/message-templates/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<MessageTemplate>) =>
+    apiFetch<MessageTemplate>(`/message-templates/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+};
+
+export const outboundMessageApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<OutboundMessage[]>(`/outbound-messages/${q}`);
+  },
+  create: (data: Omit<OutboundMessage, "id" | "campus_name" | "template_name" | "recipient_user_name" | "student_name" | "created_by" | "created_by_name" | "sent_at" | "created_at" | "updated_at">) =>
+    apiFetch<OutboundMessage>("/outbound-messages/", { method: "POST", body: JSON.stringify(data) }),
+  markSent: (id: number, provider_reference?: string) =>
+    apiFetch<OutboundMessage>(`/outbound-messages/${id}/mark-sent/`, { method: "POST", body: JSON.stringify({ provider_reference }) }),
+};
+
+export const aiLogApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<AILog[]>(`/ai-logs/${q}`);
+  },
+  create: (data: Pick<AILog, "feature" | "prompt"> & Partial<Pick<AILog, "campus" | "response" | "metadata" | "status">>) =>
+    apiFetch<AILog>("/ai-logs/", { method: "POST", body: JSON.stringify(data) }),
+};
+
+export const documentApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<DocumentRecord[]>(`/documents/${q}`);
+  },
+  create: (data: Omit<DocumentRecord, "id" | "campus_name" | "student_name" | "uploaded_by" | "uploaded_by_name" | "created_by" | "created_by_name" | "created_at" | "updated_at">) =>
+    apiFetch<DocumentRecord>("/documents/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<DocumentRecord>) =>
+    apiFetch<DocumentRecord>(`/documents/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+};
+
+export const platformSettingApi = {
+  list: (params?: Record<string, string>) => {
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    return apiFetch<PlatformSetting[]>(`/platform-settings/${q}`);
+  },
+  create: (data: Omit<PlatformSetting, "id" | "campus_name" | "created_by" | "created_by_name" | "created_at" | "updated_at">) =>
+    apiFetch<PlatformSetting>("/platform-settings/", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<PlatformSetting>) =>
+    apiFetch<PlatformSetting>(`/platform-settings/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 };
 
 export const auditApi = {
