@@ -376,7 +376,7 @@ export interface LoginResponse {
 
 export interface CaptchaChallenge {
   challenge_id: string;
-  code: string;
+  question: string;   // arithmetic challenge shown to the user, e.g. "23 + 47 = ?"
   expires_in: number;
   expires_at: string;
 }
@@ -2211,6 +2211,12 @@ export const authApi = {
     apiFetch<User>(`${getAuthBase()}/change-password/`, {
       method: "POST",
       body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  logout: (refresh: string) =>
+    apiFetch<{ detail: string }>(`${getAuthBase()}/logout/`, {
+      method: "POST",
+      body: JSON.stringify({ refresh }),
     }),
 };
 

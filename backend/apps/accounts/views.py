@@ -5,6 +5,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Q
 
@@ -67,7 +69,7 @@ class CaptchaChallengeView(APIView):
             name="CaptchaChallengeResponse",
             fields={
                 "challenge_id": serializers.CharField(),
-                "code": serializers.CharField(),
+                "question": serializers.CharField(),
                 "expires_in": serializers.IntegerField(),
                 "expires_at": serializers.DateTimeField(),
             },
@@ -78,11 +80,42 @@ class CaptchaChallengeView(APIView):
         return Response(
             {
                 "challenge_id": challenge.challenge_id,
-                "code": challenge.code,
+                "question": challenge.question,
                 "expires_in": challenge.expires_in,
                 "expires_at": challenge.expires_at,
             }
         )
+
+
+class LogoutView(APIView):
+    """
+    Blacklist the submitted refresh token so it cannot be used to obtain new
+    access tokens after the user logs out.  The client is responsible for
+    discarding the access token from its own storage.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=inline_serializer(
+            name="LogoutRequest",
+            fields={"refresh": serializers.CharField()},
+        ),
+        responses={200: inline_serializer(
+            name="LogoutResponse",
+            fields={"detail": serializers.CharField()},
+        )},
+    )
+    def post(self, request):
+        refresh_token = request.data.get("refresh", "")
+        if not refresh_token:
+            return Response({"detail": "Refresh token is required."}, status=400)
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            # Already blacklisted or malformed — treat as success (idempotent).
+            pass
+        return Response({"detail": "Logged out successfully."})
 
 
 class CurrentUserView(APIView):
@@ -98,7 +131,6 @@ class CurrentUserView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        # Log profile update event
         AuditEvent.objects.create(
             actor=request.user,
             action=AuditAction.UPDATE,
@@ -154,7 +186,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 queryset.exclude(role=UserRole.SUPER_ADMIN)
                 .filter(Q(campus_memberships__campus_id__in=campus_ids) | Q(school_id__in=campus_ids))
                 .distinct()
-        )
+            )
         return queryset
 
     def perform_destroy(self, instance):
@@ -173,7 +205,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         user_data = self.get_serializer(user).data
 
-        # Get recent audit events where this user was the actor
         recent_events = AuditEvent.objects.filter(actor=user)[:50]
         audit_events = [
             {

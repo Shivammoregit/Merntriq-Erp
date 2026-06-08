@@ -220,47 +220,51 @@ export function LoginPage() {
                 </span>
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-[1fr_8.5rem]">
-                <div>
-                  <span className="mb-1.5 block text-sm font-semibold text-ink">Captcha number</span>
-                  <div className="flex min-h-[3.75rem] items-center gap-2 rounded-md border border-line bg-slate-50 px-3 py-2">
+              <div>
+                <span className="mb-1.5 block text-sm font-semibold text-ink">
+                  Security check
+                </span>
+                <div className="flex items-stretch gap-3">
+                  <div className="flex min-h-[3.75rem] flex-1 items-center gap-2 rounded-md border border-line bg-slate-50 px-3 py-2">
                     <button
                       type="button"
                       onClick={() => void loadCaptcha()}
                       disabled={captchaLoading || busy}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Refresh captcha"
+                      aria-label="Refresh security question"
                     >
                       <RefreshCcw size={17} />
                     </button>
-                    {captchaChallenge?.code ? (
+                    {captchaChallenge?.question ? (
                       <span
-                        aria-label={`Captcha number ${captchaChallenge.code}`}
-                        className="flex h-[3.1rem] w-full max-w-[11.5rem] select-none items-center justify-center rounded-md border border-line/70 bg-white px-4 font-mono text-2xl font-bold tracking-[0.28em] text-red-600 shadow-sm"
+                        aria-label={`Security question: ${captchaChallenge.question}`}
+                        className="select-none font-mono text-lg font-bold tracking-wide text-ink"
                       >
-                        {captchaChallenge.code}
+                        {captchaChallenge.question}
                       </span>
                     ) : (
-                      <span className="flex h-[3.1rem] flex-1 items-center justify-center rounded-md border border-dashed border-line/80 bg-white text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-                        Captcha
+                      <span className="flex-1 text-center text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+                        {captchaLoading ? "Loading…" : "Unavailable"}
                       </span>
                     )}
                   </div>
+                  <label htmlFor="login-captcha" className="flex w-28 flex-col">
+                    <span className="mb-1.5 block text-sm font-semibold text-ink sr-only">
+                      Answer
+                    </span>
+                    <input
+                      id="login-captcha"
+                      type="text"
+                      inputMode="numeric"
+                      value={captcha}
+                      onChange={(e) => setCaptcha(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Answer"
+                      autoComplete="off"
+                      maxLength={6}
+                      className="h-full w-full rounded-md border border-line bg-white px-3 py-3 text-sm text-ink outline-none placeholder:text-slate-400"
+                    />
+                  </label>
                 </div>
-                <label htmlFor="login-captcha" className="block">
-                  <span className="mb-1.5 block text-sm font-semibold text-ink">Enter number</span>
-                  <input
-                    id="login-captcha"
-                    type="text"
-                    inputMode="numeric"
-                    value={captcha}
-                    onChange={(e) => setCaptcha(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                    placeholder="Number"
-                    autoComplete="off"
-                    maxLength={5}
-                    className="w-full rounded-md border border-line bg-white px-3 py-3 text-sm text-ink outline-none placeholder:text-slate-400"
-                  />
-                </label>
               </div>
             </div>
 

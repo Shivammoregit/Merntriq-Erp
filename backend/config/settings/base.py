@@ -45,7 +45,7 @@ env = environ.Env(
     MENTRIQ_UPLOAD_ACADEMIC_MAX_BYTES=(int, 10485760),
     MENTRIQ_SUPER_ADMIN_USERNAME=(str, "super.admin"),
     MENTRIQ_SUPER_ADMIN_EMAIL=(str, "super.admin@mentriq360.local"),
-    MENTRIQ_SUPER_ADMIN_PASSWORD=(str, "SuperAdmin@12345"),
+    MENTRIQ_SUPER_ADMIN_PASSWORD=(str, ""),
 )
 
 environ.Env.read_env(BASE_DIR.parent / ".env")
@@ -176,7 +176,10 @@ DATABASE_ROUTERS = ["apps.core.db_router.CampusTenantRouter"]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -267,6 +270,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env("DJANGO_REFRESH_TOKEN_DAYS")),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
 }
 
 SPECTACULAR_SETTINGS = {

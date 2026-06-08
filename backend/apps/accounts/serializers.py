@@ -1,9 +1,70 @@
+import re
+
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+from django.core.cache import cache
 
 from .captcha import validate_captcha_response
 from .models import User, UserRole
 
+
+# ─── Password complexity ──────────────────────────────────────────────────────
+
+_PASSWORD_MIN_LENGTH = 10
+
+
+def _validate_password_strength(password: str) -> str:
+    """
+    Enforce the project's minimum password security policy:
+      ≥ 10 chars, at least one uppercase, one lowercase, one digit, one special char.
+    Raises serializers.ValidationError with a list of all violations found.
+    """
+    errors: list[str] = []
+    if len(password) < _PASSWORD_MIN_LENGTH:
+        errors.append(f"Password must be at least {_PASSWORD_MIN_LENGTH} characters long.")
+    if not re.search(r"[A-Z]", password):
+        errors.append("Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", password):
+        errors.append("Password must contain at least one lowercase letter.")
+    if not re.search(r"\d", password):
+        errors.append("Password must contain at least one digit.")
+    if not re.search(r"[^a-zA-Z0-9]", password):
+        errors.append("Password must contain at least one special character (!@#$%^&* etc.).")
+    if errors:
+        raise serializers.ValidationError(errors)
+    return password
+
+
+# ─── Brute-force lockout helpers ─────────────────────────────────────────────
+
+_FAIL_PREFIX = "auth_fail:"
+_MAX_FAILURES = 5
+_LOCKOUT_SECONDS = 15 * 60   # 15 minutes
+
+
+def _fail_key(username: str) -> str:
+    return f"{_FAIL_PREFIX}{username.strip().lower()}"
+
+
+def _is_locked_out(username: str) -> bool:
+    return int(cache.get(_fail_key(username)) or 0) >= _MAX_FAILURES
+
+
+def _record_failure(username: str) -> None:
+    key = _fail_key(username)
+    try:
+        cache.incr(key)
+    except ValueError:
+        cache.set(key, 1, timeout=_LOCKOUT_SECONDS)
+
+
+def _clear_failures(username: str) -> None:
+    cache.delete(_fail_key(username))
+
+
+# ─── Serializers ─────────────────────────────────────────────────────────────
 
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -129,7 +190,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserAdminSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    password = serializers.CharField(write_only=True, required=False, min_length=_PASSWORD_MIN_LENGTH)
     full_name = serializers.SerializerMethodField()
     campuses = serializers.SerializerMethodField()
     school_name = serializers.CharField(source="school.name", read_only=True)
@@ -183,6 +244,9 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("created_at", "updated_at")
+
+    def validate_password(self, value: str) -> str:
+        return _validate_password_strength(value)
 
     def get_linked_student_profile(self, obj: User) -> dict | None:
         try:
@@ -369,11 +433,32 @@ class ERPTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         captcha_id = attrs.pop("captcha_id", "")
         captcha_answer = attrs.pop("captcha_answer", "")
+
         if not validate_captcha_response(captcha_id, captcha_answer):
             raise serializers.ValidationError(
-                {"captcha_answer": "Captcha is incorrect or expired. Refresh the captcha and try again."}
+                {"captcha_answer": "Captcha answer is incorrect or expired. Refresh and try again."}
             )
-        data = super().validate(attrs)
+
+        username = attrs.get(self.username_field, "").strip()
+
+        # Brute-force lockout check (checked after captcha to avoid enumeration
+        # of locked accounts without solving a captcha first).
+        if username and _is_locked_out(username):
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Login temporarily locked due to repeated failures. Please try again in 15 minutes."]}
+            )
+
+        try:
+            data = super().validate(attrs)
+        except (serializers.ValidationError, AuthenticationFailed):
+            if username:
+                _record_failure(username)
+            raise
+
+        # Successful authentication — clear the failure counter.
+        if username:
+            _clear_failures(username)
+
         if self.user.role != UserRole.SUPER_ADMIN:
             campus = self.user.school
             if campus is None:
@@ -385,25 +470,34 @@ class ERPTokenObtainPairSerializer(TokenObtainPairSerializer):
                     .first()
                 ) or CampusMembership.objects.filter(user=self.user).select_related("campus").first()
                 campus = membership.campus if membership else None
+
             if campus is None:
-                raise serializers.ValidationError({"username": "This account is not assigned to a school."})
-            if campus.status != "active":
+                # Don't reveal that the account exists but has no school assignment.
                 raise serializers.ValidationError(
-                    {"username": f"{campus.name} is {campus.status}. Contact the Super Admin."}
+                    {"non_field_errors": ["Login failed. Please contact your administrator."]}
                 )
+            if campus.status != "active":
+                # Don't reveal the school name or its exact status to unauthenticated callers.
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["Login failed. Please contact your administrator."]}
+                )
+
         data["user"] = UserSerializer(self.user).data
         return data
 
 
 class PasswordChangeSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
-    new_password = serializers.CharField(write_only=True, min_length=8)
+    new_password = serializers.CharField(write_only=True, min_length=_PASSWORD_MIN_LENGTH)
 
     def validate_current_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
             raise serializers.ValidationError("Current password is incorrect.")
         return value
+
+    def validate_new_password(self, value: str) -> str:
+        return _validate_password_strength(value)
 
     def save(self, **kwargs):
         user = self.context["request"].user

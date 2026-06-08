@@ -12,6 +12,7 @@ import {
   authApi,
   clearTokens,
   getActiveTenantCampusCode,
+  getRefresh,
   hasTokens,
   SESSION_EXPIRED_EVENT,
   storeTokens,
@@ -86,6 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const refresh = getRefresh();
+    // Blacklist the refresh token server-side before clearing local storage so
+    // the Authorization header is still valid when the request is sent.
+    if (refresh) {
+      authApi.logout(refresh).catch(() => {});
+    }
     clearTokens();
     localStorage.removeItem(LAST_ACTIVITY_KEY);
     setUser(null);
