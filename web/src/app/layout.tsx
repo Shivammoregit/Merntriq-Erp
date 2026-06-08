@@ -4,7 +4,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://mentriq-erp.vercel.app"),
   title: "Mentriq360 ERP",
   description: "Role-based school ERP for admissions, attendance, academics, results, resources, admit cards, fees, and reporting.",
   applicationName: "Mentriq360 ERP",

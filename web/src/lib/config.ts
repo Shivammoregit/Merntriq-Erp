@@ -1,4 +1,5 @@
 const LOCAL_API_PORT = process.env.NEXT_PUBLIC_LOCAL_API_PORT ?? "8000";
+const PRODUCTION_API_BASE = "https://backend-nu-self-91.vercel.app/api/v1";
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
 function trimTrailingSlash(value: string) {
@@ -11,9 +12,11 @@ function localApiBase(hostname = "localhost") {
 }
 
 function resolveApiBaseUrl() {
-  const configuredBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const configuredBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (configuredBase) return trimTrailingSlash(configuredBase);
-  if (typeof window === "undefined") return localApiBase();
+  if (typeof window === "undefined") {
+    return process.env.NODE_ENV === "production" ? PRODUCTION_API_BASE : localApiBase();
+  }
 
   try {
     const pageHost = window.location.hostname;
@@ -21,9 +24,9 @@ function resolveApiBaseUrl() {
     if (window.location.protocol === "http:" && window.location.port) {
       return localApiBase(pageHost);
     }
-    return "/api/v1";
+    return PRODUCTION_API_BASE;
   } catch {
-    return localApiBase();
+    return process.env.NODE_ENV === "production" ? PRODUCTION_API_BASE : localApiBase();
   }
 }
 

@@ -14,7 +14,8 @@ jobs:
       DJANGO_USE_SQLITE: "True"
       DJANGO_SECRET_KEY: ci-test-secret-key-that-is-long-enough
       DJANGO_DEBUG: "False"
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_SITE_URL: https://mentriq-erp.vercel.app
+      NEXT_PUBLIC_API_BASE_URL: https://backend-nu-self-91.vercel.app/api/v1
     steps:
       - uses: actions/checkout@v4
 

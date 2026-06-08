@@ -21,6 +21,7 @@ Backend:
 
 Frontend:
 
+- `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX` when using tenant subdomains
 - `NEXT_PUBLIC_DEFAULT_TENANT_CODE` only for single-school deployments
@@ -114,6 +115,13 @@ VERCEL_PROJECT_ID
 
 Use `vercel env add` for production variables and `vercel env pull .env.local --environment=production` for local validation. Never commit `.env.local`.
 
+Current production frontend values:
+
+```text
+NEXT_PUBLIC_SITE_URL=https://mentriq-erp.vercel.app
+NEXT_PUBLIC_API_BASE_URL=https://backend-nu-self-91.vercel.app/api/v1
+```
+
 ## Backend Deployment
 
 Deploy the Django backend to the selected provider with:
@@ -172,4 +180,3 @@ Backend:
 - Roll back application version first.
 - Roll back database only if a migration is incompatible and a tested restore point exists.
 - Never restore production payment data without reconciling gateway transactions.
-

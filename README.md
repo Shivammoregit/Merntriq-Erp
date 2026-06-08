@@ -98,7 +98,8 @@ You can also set `NEXT_PUBLIC_DEFAULT_TENANT_CODE` for a single-campus deploymen
 For production web deployments, set `NEXT_PUBLIC_API_BASE_URL` to the deployed Django API URL, for example:
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain.vercel.app/api/v1
+NEXT_PUBLIC_SITE_URL=https://mentriq-erp.vercel.app
+NEXT_PUBLIC_API_BASE_URL=https://backend-nu-self-91.vercel.app/api/v1
 ```
 
 ## Verification

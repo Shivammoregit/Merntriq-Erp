@@ -45,6 +45,7 @@ DJANGO_CORS_ALLOWED_ORIGINS=https://app.mentriq360.example.com
 DJANGO_CSRF_TRUSTED_ORIGINS=https://app.mentriq360.example.com
 DJANGO_USE_X_FORWARDED_HOST=True
 DJANGO_CACHE_URL=redis://user:password@redis-host:6379/1
+NEXT_PUBLIC_SITE_URL=https://app.mentriq360.example.com
 NEXT_PUBLIC_API_BASE_URL=https://api.mentriq360.example.com/api/v1
 NEXT_PUBLIC_TENANT_DOMAIN_SUFFIX=schools.mentriq360.example.com
 ```
