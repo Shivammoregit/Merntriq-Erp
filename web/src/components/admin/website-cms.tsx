@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   CheckCircle2,
-  Eye,
   Globe2,
   Image,
   Link,
@@ -14,8 +13,6 @@ import {
   Plus,
   RefreshCcw,
   Search,
-  Settings2,
-  SlidersHorizontal,
   Trash2,
   Type,
   Layout,
@@ -27,7 +24,7 @@ import {
   ToggleLeft,
 } from "lucide-react";
 import { phase10Api, type SchoolWebsiteContent } from "@/lib/api";
-import { Badge, statusBadge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 
 type ContentType = "page" | "news" | "notice" | "gallery" | "event" | "admission" | "contact";
@@ -332,6 +329,7 @@ export function WebsiteCMS() {
             </div>
             <div>
               <label className="block text-sm font-medium text-ink">
+                {/* eslint-disable-next-line jsx-a11y/alt-text */}
                 <Image size={14} className="mr-1 inline text-muted" />
                 Media URL
               </label>

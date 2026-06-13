@@ -164,7 +164,7 @@ class UserSerializer(serializers.ModelSerializer):
             return []
         result = []
         for membership in memberships:
-            campus = membership.campus_obj
+            campus = membership.campus
             if not campus:
                 continue
             result.append({
@@ -221,7 +221,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
     school_code = serializers.CharField(source="school.code", read_only=True)
     school_status = serializers.CharField(source="school.status", read_only=True)
     campus_ids = serializers.ListField(
-        child=serializers.IntegerField(),
+        child=serializers.CharField(),
         write_only=True,
         required=False,
         allow_empty=True,
@@ -310,7 +310,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
     def get_campuses(self, obj: User) -> list[dict]:
         result = []
         for membership in obj.get_campus_memberships():
-            campus = membership.campus_obj
+            campus = membership.campus
             if not campus:
                 continue
             result.append({

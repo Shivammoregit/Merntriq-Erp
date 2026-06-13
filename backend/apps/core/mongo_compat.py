@@ -109,13 +109,25 @@ def _ref_val(v):
     return v
 
 
+def _resolve_field_names(doc_cls, kwargs):
+    """Map common field aliases (e.g. ``campus`` → ``campus_id``) when the target
+    document has the ``_id`` variant but not the plain name."""
+    for key in list(kwargs.keys()):
+        if key not in doc_cls._fields and f"{key}_id" in doc_cls._fields:
+            kwargs[f"{key}_id"] = kwargs.pop(key)
+    return kwargs
+
+
 @_queryset_method
 def create(queryset, **kwargs):
     """Django-ORM-like ``Model.objects.create(**kwargs)``.
 
     Constructs a document and saves it immediately, returning the instance.
     """
-    doc = queryset._document(**_resolve_refs(kwargs))
+    doc_cls = queryset._document
+    resolved = _resolve_refs(kwargs)
+    resolved = _resolve_field_names(doc_cls, resolved)
+    doc = doc_cls(**resolved)
     doc.save()
     return doc
 
@@ -206,8 +218,11 @@ def update_or_create(queryset, defaults=None, **kwargs):
 
     Returns ``(instance, created)`` tuple.
     """
+    doc_cls = queryset._document
     defaults = _resolve_refs(defaults or {})
+    defaults = _resolve_field_names(doc_cls, defaults)
     kwargs = _resolve_refs(kwargs)
+    kwargs = _resolve_field_names(doc_cls, kwargs)
     try:
         doc = queryset.get(**kwargs)
         for key, value in defaults.items():
@@ -216,7 +231,7 @@ def update_or_create(queryset, defaults=None, **kwargs):
         return doc, False
     except DoesNotExist:
         kwargs.update(defaults)
-        doc = queryset._document(**kwargs)
+        doc = doc_cls(**kwargs)
         doc.save()
         return doc, True
 

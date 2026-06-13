@@ -458,6 +458,8 @@ def _resolve_target_model(source_cls, ref_name: str) -> type[Document] | None:
         "approved_by": "User",
         "registered_by": "User",
         "authorized_by": "User",
+        "campus": "Campus",
+        "user": "User",
     }
     mapped = _COMMON_REF_MAP.get(ref_name)
     if mapped and mapped in _MODEL_REGISTRY:

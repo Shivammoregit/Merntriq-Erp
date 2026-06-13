@@ -344,8 +344,8 @@ class PasswordPolicyTests(APITestCase):
             "username": "newuser.test",
             "password": password,
             "role": "school_admin",
-            "school": self.school.id,
-            "campus_ids": [self.school.id],
+            "school": str(self.school.id),
+            "campus_ids": [str(self.school.id)],
         }
 
     def test_rejects_short_password(self):

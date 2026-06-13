@@ -1,6 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const API_BASE_URL = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const WEB_BASE_URL = process.env.PLAYWRIGHT_WEB_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
