@@ -13,7 +13,8 @@ COPY backend /app/backend
 
 RUN addgroup --system django --gid 1001 && \
     adduser --system --uid 1001 --ingroup django django && \
-    chown -R django:django /app/backend
+    mkdir -p /app/data && \
+    chown -R django:django /app/backend /app/data
 
 USER django
 

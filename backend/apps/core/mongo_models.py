@@ -1489,6 +1489,10 @@ class FeeAssignment(AuditDocument):
     status = StringField(max_length=20, choices=[e.value for e in FeeStatusEnum], default=FeeStatusEnum.PENDING.value)
     created_by_id = IntField(null=True)
 
+    @property
+    def payable_amount(self):
+        return (self.amount or PyDecimal("0")) + (self.late_fee or PyDecimal("0")) - (self.discount_amount or PyDecimal("0"))
+
     meta = {
         "collection": "fee_assignments",
         "indexes": [("student_id", "status"), ("fee_structure_id", "status"), ("due_date", "status")],

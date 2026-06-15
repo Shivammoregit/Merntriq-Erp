@@ -23,6 +23,11 @@ REST_FRAMEWORK = {  # noqa: F405
     },
 }
 
+# Local dev: drop the IP abuse-guard. It auto-bans IPs on rapid/bursty traffic
+# (the frontend's polling looks like scraping), returning 429 for minutes — the
+# real cause of "Too Many Requests" while developing.
+MIDDLEWARE = [m for m in MIDDLEWARE if "AbuseGuardMiddleware" not in m]  # noqa: F405
+
 # Security logger uses console only in development
 import logging  # noqa: F811
 logging.getLogger("mentriq.security").handlers.clear()

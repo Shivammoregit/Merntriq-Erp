@@ -32,6 +32,11 @@ services:
       # Local-dev settings: no forced HTTPS redirect / secure-only cookies,
       # so the app is usable over plain http://localhost.
       - DJANGO_SETTINGS_MODULE=config.settings.local
+      # Keep the internal SQLite (Django users / super-admin) on a persistent
+      # volume so it survives container rebuilds.
+      - DJANGO_SQLITE_PATH=/app/data/db.sqlite3
+    volumes:
+      - backend-sqlite:/app/data
     command: >
       sh -c "python manage.py migrate &&
       gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
@@ -57,3 +62,4 @@ services:
 
 volumes:
   mongo-data:
+  backend-sqlite:

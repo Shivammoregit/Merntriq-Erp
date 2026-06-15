@@ -151,7 +151,9 @@ if MONGODB_URI:
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        # Overridable so the SQLite file can live on a persistent volume
+        # (keeps Django users/super-admin across container rebuilds).
+        "NAME": env("DJANGO_SQLITE_PATH", default=str(BASE_DIR / "db.sqlite3")),
     }
 }
 

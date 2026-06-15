@@ -421,7 +421,7 @@ class CampusMembershipSerializer(DocumentSerializer):
         read_only_fields = ("created_at", "updated_at")
 
     def get_user_name(self, obj: CampusMembership) -> str:
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -475,7 +475,7 @@ class AttendanceDeviceSerializer(DocumentSerializer):
     def get_configured_by_name(self, obj: AttendanceDevice) -> str:
         if not obj.configured_by:
             return ""
-        return obj.configured_by.get_full_name() or obj.configured_by.username
+        return (obj.configured_by.get_full_name() or obj.configured_by.username) if obj.configured_by else ""
 
     def validate(self, attrs):
         instance = self.instance
@@ -542,7 +542,7 @@ class ClassSectionSerializer(DocumentSerializer):
     def get_class_teacher_name(self, obj: ClassSection) -> str:
         if not obj.class_teacher:
             return ""
-        return obj.class_teacher.get_full_name() or obj.class_teacher.username
+        return (obj.class_teacher.get_full_name() or obj.class_teacher.username) if obj.class_teacher else ""
 
     def validate(self, attrs):
         session = attrs.get("session", getattr(self.instance, "session", None))
@@ -579,7 +579,7 @@ class TeacherSubjectAllocationSerializer(DocumentSerializer):
         return f"{obj.section.grade_name} - {obj.section.section_name}"
 
     def get_teacher_name(self, obj: TeacherSubjectAllocation) -> str:
-        return obj.teacher.get_full_name() or obj.teacher.username
+        return (obj.teacher.get_full_name() or obj.teacher.username) if obj.teacher else ""
 
     def validate_subject(self, value: str) -> str:
         subject = (value or "").strip()
@@ -669,7 +669,7 @@ class StudentSerializer(DocumentSerializer):
     def get_user_name(self, obj: Student) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -776,12 +776,12 @@ class StaffAttendanceRecordSerializer(DocumentSerializer):
         read_only_fields = ("marked_by", "created_at", "updated_at")
 
     def get_staff_name(self, obj: StaffAttendanceRecord) -> str:
-        return obj.staff_user.get_full_name() or obj.staff_user.username
+        return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
 
     def get_marked_by_name(self, obj: StaffAttendanceRecord) -> str:
         if not obj.marked_by:
             return ""
-        return obj.marked_by.get_full_name() or obj.marked_by.username
+        return (obj.marked_by.get_full_name() or obj.marked_by.username) if obj.marked_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -826,7 +826,7 @@ class StaffProfileSerializer(DocumentSerializer):
         read_only_fields = ("created_at", "updated_at")
 
     def get_user_name(self, obj: StaffProfile) -> str:
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
     def validate(self, attrs):
         user = attrs.get("user", getattr(self.instance, "user", None))
@@ -870,7 +870,7 @@ class TimetableSlotSerializer(DocumentSerializer):
     def get_teacher_name(self, obj: TimetableSlot) -> str:
         if not obj.teacher:
             return ""
-        return obj.teacher.get_full_name() or obj.teacher.username
+        return (obj.teacher.get_full_name() or obj.teacher.username) if obj.teacher else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -1012,7 +1012,7 @@ class ExamScheduleSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: ExamSchedule) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -1100,7 +1100,7 @@ class LibraryLoanSerializer(DocumentSerializer):
         if obj.student_id:
             return obj.student.full_name
         if obj.staff_user_id:
-            return obj.staff_user.get_full_name() or obj.staff_user.username
+            return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
         return ""
 
     def validate(self, attrs):
@@ -1319,7 +1319,7 @@ class AssignedWorkSerializer(DocumentSerializer):
     def get_assigned_by_name(self, obj: AssignedWork) -> str:
         if not obj.assigned_by:
             return ""
-        return obj.assigned_by.get_full_name() or obj.assigned_by.username
+        return (obj.assigned_by.get_full_name() or obj.assigned_by.username) if obj.assigned_by else ""
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -1396,12 +1396,12 @@ class AssignmentSubmissionSerializer(DocumentSerializer):
     def get_submitted_by_name(self, obj: AssignmentSubmission) -> str:
         if not obj.submitted_by:
             return ""
-        return obj.submitted_by.get_full_name() or obj.submitted_by.username
+        return (obj.submitted_by.get_full_name() or obj.submitted_by.username) if obj.submitted_by else ""
 
     def get_checked_by_name(self, obj: AssignmentSubmission) -> str:
         if not obj.checked_by:
             return ""
-        return obj.checked_by.get_full_name() or obj.checked_by.username
+        return (obj.checked_by.get_full_name() or obj.checked_by.username) if obj.checked_by else ""
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -1447,7 +1447,7 @@ class LearningResourceSerializer(DocumentSerializer):
     def get_uploaded_by_name(self, obj: LearningResource) -> str:
         if not obj.uploaded_by:
             return ""
-        return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return (obj.uploaded_by.get_full_name() or obj.uploaded_by.username) if obj.uploaded_by else ""
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -1524,12 +1524,12 @@ class ResultRecordSerializer(DocumentSerializer):
     def get_recorded_by_name(self, obj: ResultRecord) -> str:
         if not obj.recorded_by:
             return ""
-        return obj.recorded_by.get_full_name() or obj.recorded_by.username
+        return (obj.recorded_by.get_full_name() or obj.recorded_by.username) if obj.recorded_by else ""
 
     def get_reviewed_by_name(self, obj: ResultRecord) -> str:
         if not obj.reviewed_by:
             return ""
-        return obj.reviewed_by.get_full_name() or obj.reviewed_by.username
+        return (obj.reviewed_by.get_full_name() or obj.reviewed_by.username) if obj.reviewed_by else ""
 
     def get_percentage(self, obj: ResultRecord) -> str:
         if not obj.max_score:
@@ -1600,7 +1600,7 @@ class AdmitCardSerializer(DocumentSerializer):
     def get_issued_by_name(self, obj: AdmitCard) -> str:
         if not obj.issued_by:
             return ""
-        return obj.issued_by.get_full_name() or obj.issued_by.username
+        return (obj.issued_by.get_full_name() or obj.issued_by.username) if obj.issued_by else ""
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -1646,7 +1646,7 @@ class FeeStructureSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: FeeStructure) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         amount = attrs.get("amount", getattr(self.instance, "amount", 0))
@@ -1703,7 +1703,7 @@ class PaymentGatewayConfigSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: PaymentGatewayConfig) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def create(self, validated_data):
         key_secret = validated_data.pop("key_secret", "")
@@ -1944,7 +1944,7 @@ class PaymentTransactionSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: PaymentTransaction) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -1987,12 +1987,12 @@ class SalarySetupSerializer(DocumentSerializer):
         read_only_fields = ("created_by", "created_at", "updated_at")
 
     def get_staff_name(self, obj: SalarySetup) -> str:
-        return obj.staff_user.get_full_name() or obj.staff_user.username
+        return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
 
     def get_created_by_name(self, obj: SalarySetup) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -2051,12 +2051,12 @@ class SalaryRecordSerializer(DocumentSerializer):
         read_only_fields = ("paid_by", "created_by", "created_at", "updated_at")
 
     def get_staff_name(self, obj: SalaryRecord) -> str:
-        return obj.staff_user.get_full_name() or obj.staff_user.username
+        return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
 
     def get_created_by_name(self, obj: SalaryRecord) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         staff_user = attrs.get("staff_user", getattr(self.instance, "staff_user", None))
@@ -2093,7 +2093,7 @@ class FinanceEventSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: FinanceEvent) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
 
 class AcademicEventSerializer(DocumentSerializer):
@@ -2124,12 +2124,12 @@ class AcademicEventSerializer(DocumentSerializer):
     def get_teacher_name(self, obj: AcademicEvent) -> str:
         if not obj.teacher:
             return ""
-        return obj.teacher.get_full_name() or obj.teacher.username
+        return (obj.teacher.get_full_name() or obj.teacher.username) if obj.teacher else ""
 
     def get_created_by_name(self, obj: AcademicEvent) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
 
 class MessageTemplateSerializer(DocumentSerializer):
@@ -2159,7 +2159,7 @@ class MessageTemplateSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: MessageTemplate) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
 
 class CommunicationSettingSerializer(DocumentSerializer):
@@ -2205,7 +2205,7 @@ class CommunicationSettingSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: CommunicationSetting) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def get_has_api_key(self, obj: CommunicationSetting) -> bool:
         return bool(obj.api_key)
@@ -2293,12 +2293,12 @@ class OutboundMessageSerializer(DocumentSerializer):
     def get_recipient_user_name(self, obj: OutboundMessage) -> str:
         if not obj.recipient_user:
             return ""
-        return obj.recipient_user.get_full_name() or obj.recipient_user.username
+        return (obj.recipient_user.get_full_name() or obj.recipient_user.username) if obj.recipient_user else ""
 
     def get_created_by_name(self, obj: OutboundMessage) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -2342,7 +2342,7 @@ class DeviceSyncLogSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: DeviceSyncLog) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -2381,12 +2381,12 @@ class AILogSerializer(DocumentSerializer):
     def get_user_name(self, obj: AILog) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
     def get_created_by_name(self, obj: AILog) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
 
 class DocumentSerializer(DocumentSerializer):
@@ -2422,17 +2422,17 @@ class DocumentSerializer(DocumentSerializer):
     def get_uploaded_by_name(self, obj: Document) -> str:
         if not obj.uploaded_by:
             return ""
-        return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return (obj.uploaded_by.get_full_name() or obj.uploaded_by.username) if obj.uploaded_by else ""
 
     def get_staff_user_name(self, obj: Document) -> str:
         if not obj.staff_user:
             return ""
-        return obj.staff_user.get_full_name() or obj.staff_user.username
+        return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
 
     def get_created_by_name(self, obj: Document) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -2679,7 +2679,7 @@ class UserActivityLogSerializer(DocumentSerializer):
     def get_user_name(self, obj: UserActivityLog) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class DocumentAccessLogSerializer(DocumentSerializer):
@@ -2712,7 +2712,7 @@ class DocumentAccessLogSerializer(DocumentSerializer):
     def get_user_name(self, obj: DocumentAccessLog) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class EnterpriseUsageMetricSerializer(DocumentSerializer):
@@ -2800,7 +2800,7 @@ class PlatformSettingSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: PlatformSetting) -> str:
         if not obj.created_by:
             return ""
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
 
 class AuditEventSerializer(DocumentSerializer):
@@ -2825,7 +2825,7 @@ class AuditEventSerializer(DocumentSerializer):
     def get_actor_name(self, obj: AuditEvent) -> str:
         if not obj.actor:
             return ""
-        return obj.actor.get_full_name() or obj.actor.username
+        return (obj.actor.get_full_name() or obj.actor.username) if obj.actor else ""
 
 
 class ApprovalRequestSerializer(DocumentSerializer):
@@ -2867,12 +2867,12 @@ class ApprovalRequestSerializer(DocumentSerializer):
     def get_requested_by_name(self, obj: ApprovalRequest) -> str:
         if not obj.requested_by:
             return ""
-        return obj.requested_by.get_full_name() or obj.requested_by.username
+        return (obj.requested_by.get_full_name() or obj.requested_by.username) if obj.requested_by else ""
 
     def get_reviewed_by_name(self, obj: ApprovalRequest) -> str:
         if not obj.reviewed_by:
             return ""
-        return obj.reviewed_by.get_full_name() or obj.reviewed_by.username
+        return (obj.reviewed_by.get_full_name() or obj.reviewed_by.username) if obj.reviewed_by else ""
 
 
 class AnnouncementSerializer(DocumentSerializer):
@@ -2904,7 +2904,7 @@ class AnnouncementSerializer(DocumentSerializer):
     def get_created_by_name(self, obj: Announcement) -> str:
         if not obj.created_by:
             return "Admin team"
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def validate(self, attrs):
         request = self.context.get("request")
@@ -2955,12 +2955,12 @@ class SupportTicketSerializer(DocumentSerializer):
         )
 
     def get_created_by_name(self, obj: SupportTicket) -> str:
-        return obj.created_by.get_full_name() or obj.created_by.username
+        return (obj.created_by.get_full_name() or obj.created_by.username) if obj.created_by else ""
 
     def get_reviewed_by_name(self, obj: SupportTicket) -> str:
         if not obj.reviewed_by:
             return ""
-        return obj.reviewed_by.get_full_name() or obj.reviewed_by.username
+        return (obj.reviewed_by.get_full_name() or obj.reviewed_by.username) if obj.reviewed_by else ""
 
 
 class AdmissionFormTemplateSerializer(DocumentSerializer):
@@ -3091,7 +3091,7 @@ class TransportDriverSerializer(DocumentSerializer):
     def get_user_name(self, obj: TransportDriver) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -3178,7 +3178,7 @@ class LibraryBookRequestSerializer(DocumentSerializer):
         if obj.student_id:
             return obj.student.full_name
         if obj.staff_user_id:
-            return obj.staff_user.get_full_name() or obj.staff_user.username
+            return (obj.staff_user.get_full_name() or obj.staff_user.username) if obj.staff_user else ""
         return ""
 
     def validate(self, attrs):
@@ -3210,7 +3210,7 @@ class InventoryAssetSerializer(DocumentSerializer):
     def get_allocated_to_user_name(self, obj: InventoryAsset) -> str:
         if not obj.allocated_to_user:
             return ""
-        return obj.allocated_to_user.get_full_name() or obj.allocated_to_user.username
+        return (obj.allocated_to_user.get_full_name() or obj.allocated_to_user.username) if obj.allocated_to_user else ""
 
     def validate(self, attrs):
         campus = attrs.get("campus", getattr(self.instance, "campus", None))
@@ -3260,7 +3260,7 @@ class PushNotificationDeviceSerializer(DocumentSerializer):
         extra_kwargs = {"token": {"write_only": True}}
 
     def get_user_name(self, obj: PushNotificationDevice) -> str:
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class PushNotificationLogSerializer(DocumentSerializer):
@@ -3276,7 +3276,7 @@ class PushNotificationLogSerializer(DocumentSerializer):
     def get_user_name(self, obj: PushNotificationLog) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class MarketplacePluginSerializer(DocumentSerializer):
@@ -3334,7 +3334,7 @@ class DeviceLoginSessionSerializer(DocumentSerializer):
         read_only_fields = ("created_at", "updated_at")
 
     def get_user_name(self, obj: DeviceLoginSession) -> str:
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class SecurityEventSerializer(DocumentSerializer):
@@ -3349,7 +3349,7 @@ class SecurityEventSerializer(DocumentSerializer):
     def get_user_name(self, obj: SecurityEvent) -> str:
         if not obj.user:
             return ""
-        return obj.user.get_full_name() or obj.user.username
+        return (obj.user.get_full_name() or obj.user.username) if obj.user else ""
 
 
 class ProductionAuditRunSerializer(DocumentSerializer):
