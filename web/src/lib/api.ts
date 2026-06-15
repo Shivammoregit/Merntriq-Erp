@@ -57,7 +57,8 @@ function getApiBase() {
   if (configuredBase) return configuredBase;
   if (typeof window === "undefined") {
     if (process.env.NODE_ENV !== "production") return localApiBase();
-    throw new Error("NEXT_PUBLIC_API_BASE_URL must be set in production");
+    console.warn("[Mentriq360] NEXT_PUBLIC_API_BASE_URL is not set. Falling back to relative path /api/v1. Set this environment variable in Vercel and redeploy.");
+    return "/api/v1";
   }
 
   try {
@@ -66,10 +67,12 @@ function getApiBase() {
     if (window.location.protocol === "http:" && window.location.port) {
       return localApiBase(pageHost);
     }
-    throw new Error("NEXT_PUBLIC_API_BASE_URL must be set in production");
+    console.warn("[Mentriq360] NEXT_PUBLIC_API_BASE_URL is not set. Falling back to relative path /api/v1. Set this environment variable in Vercel and redeploy.");
+    return "/api/v1";
   } catch {
     if (process.env.NODE_ENV !== "production") return localApiBase();
-    throw new Error("NEXT_PUBLIC_API_BASE_URL must be set in production");
+    console.warn("[Mentriq360] NEXT_PUBLIC_API_BASE_URL is not set. Falling back to relative path /api/v1. Set this environment variable in Vercel and redeploy.");
+    return "/api/v1";
   }
 }
 

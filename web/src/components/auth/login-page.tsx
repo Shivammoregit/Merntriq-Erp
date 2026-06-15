@@ -58,8 +58,9 @@ export function LoginPage() {
       setCaptcha("");
       setApiRetryCount(0);
     } catch (err) {
+      console.error("[Mentriq360] Captcha load failed:", err);
       setCaptchaChallenge(null);
-      setError(err instanceof ApiError ? err.message : "Captcha could not be loaded. Check the server connection.");
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Captcha could not be loaded. Check the server connection.");
     } finally {
       setCaptchaLoading(false);
     }
@@ -96,7 +97,8 @@ export function LoginPage() {
     try {
       await login(username.trim(), password, captchaChallenge.challenge_id, captcha.trim());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Login failed. Please try again.");
+      console.error("[Mentriq360] Login failed:", err);
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Login failed. Please try again.");
       void loadCaptcha(false);
     } finally {
       setBusy(false);
