@@ -1227,7 +1227,12 @@ class RoleScopedModelViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("This record belongs to a campus outside your admin scope.")
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Re-fetch a fresh queryset each request. A class-level ``queryset =
+        # Model.objects`` is a single mongoengine QuerySet whose result cache
+        # otherwise persists across requests in long-lived workers, so list
+        # endpoints show stale data after writes (and need a restart to update).
+        document = getattr(self.queryset, "_document", None)
+        queryset = document.objects if document is not None else super().get_queryset()
         user = self.request.user
         if not getattr(user, "is_authenticated", False):
             return queryset.none()
@@ -2619,7 +2624,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = SupportTicket.objects  # fresh queryset each request (avoid stale mongo cache)
         user = self.request.user
         status_filter = self.request.query_params.get("status")
         if status_filter:
@@ -5845,7 +5850,7 @@ class SaaSPlanViewSet(viewsets.ModelViewSet):
     search_fields = ("name", "description")
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = SaaSPlan.objects  # fresh queryset each request (avoid stale mongo cache)
         if getattr(self.request.user, "role", None) == UserRole.SCHOOL_ADMIN:
             return queryset.filter(is_active=True)
         return queryset
