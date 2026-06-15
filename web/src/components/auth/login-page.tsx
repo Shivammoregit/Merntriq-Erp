@@ -1,11 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
-  Building2,
-  CheckCircle2,
   Eye,
   EyeOff,
   KeyRound,
@@ -14,10 +12,9 @@ import {
   RefreshCcw,
   Smartphone,
   User,
-  WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, authApi, getActiveTenantCampusCode, type CaptchaChallenge } from "@/lib/api";
+import { ApiError, authApi, type CaptchaChallenge } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
 
 const LOGIN_FEATURES = [
@@ -36,18 +33,9 @@ export function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showPasswordHelp, setShowPasswordHelp] = useState(false);
-  const [tenantCode, setTenantCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [apiRetryCount, setApiRetryCount] = useState(0);
-  const connectionStatus = useMemo(() => {
-    if (captchaLoading) return { label: "Checking API", tone: "checking", Icon: RefreshCcw };
-    if (captchaChallenge) return { label: "API connected", tone: "online", Icon: CheckCircle2 };
-    if (apiRetryCount > 0) return { label: `Retry ${apiRetryCount}/3`, tone: "offline", Icon: WifiOff };
-    return { label: "API unavailable", tone: "offline", Icon: WifiOff };
-  }, [captchaChallenge, captchaLoading, apiRetryCount]);
-  const ConnectionIcon = connectionStatus.Icon;
-  const tenantLabel = tenantCode ? `Tenant ${tenantCode}` : "Central tenant";
 
   const loadCaptcha = useCallback(async (clearError = true) => {
     setCaptchaLoading(true);
@@ -67,7 +55,6 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
-    setTenantCode(getActiveTenantCampusCode());
     void loadCaptcha(false);
   }, [loadCaptcha]);
 
@@ -110,11 +97,8 @@ export function LoginPage() {
       <section className="login-frame">
         <aside className="login-hero" aria-label="MentriQ360 ERP overview">
           <div className="relative z-10 flex h-full flex-col gap-6 p-6 lg:p-8 xl:p-10">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
               <BrandLogo size="lg" />
-              <span className="rounded-md border border-line/70 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted shadow-sm">
-                School ERP
-              </span>
             </div>
 
             <div className="login-school-photo" aria-hidden="true">
@@ -160,7 +144,7 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="login-card animate-fade-up" noValidate>
-            <div className="mb-6 flex flex-col gap-4 border-b border-line/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="mb-6 flex flex-col gap-4 border-b border-line/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <BrandLogo />
               <p className="max-w-[13rem] text-left text-xs leading-5 text-muted sm:text-right">
                 MentriQ360 School ERP
@@ -169,16 +153,6 @@ export function LoginPage() {
             </div>
 
             <div className="mb-6 text-left">
-              <div className="login-status-strip mb-4" aria-label="Connection and tenant status">
-                <span className={`login-status-pill login-status-pill--${connectionStatus.tone}`}>
-                  <ConnectionIcon size={14} className={captchaLoading ? "animate-spin" : ""} />
-                  {connectionStatus.label}
-                </span>
-                <span className="login-status-pill login-status-pill--neutral">
-                  <Building2 size={14} />
-                  {tenantLabel}
-                </span>
-              </div>
               <p className="inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-strong">
                 Professional ERP login
               </p>
@@ -345,10 +319,6 @@ export function LoginPage() {
               Only authorized institution accounts can sign in. User names and passwords are issued by the Super Admin or School Admin.
             </div>
           </form>
-
-          <p className="mt-4 text-center text-xs text-muted lg:text-right">
-            Compatible with Chrome 70+, Firefox 65+, and Microsoft Edge 89+
-          </p>
         </section>
       </section>
     </main>

@@ -19,7 +19,7 @@ export function BrandLogo({
 }) {
   const customLogo = logoUrl?.trim();
   const boxSize = size === "lg" ? "h-14 w-14" : "h-9 w-9";
-  const markSize = size === "lg" ? "h-16 w-16" : "h-10 w-10";
+  const markSize = size === "lg" ? "h-16 w-16 transform -translate-y-[8px]" : "h-10 w-10 transform -translate-y-[6px]";
   const wordmarkSize = size === "lg" ? "h-14 w-64" : "h-9 w-44";
   const logoSource = customLogo || "/erp-logo-mark.png";
 
