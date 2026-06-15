@@ -26,9 +26,9 @@ services:
     env_file:
       - .env
     environment:
-      # Inside the Compose network the backend reaches Mongo by service name,
-      # not the localhost URI used for native local runs in .env.
-      - MONGODB_URI=mongodb://mongo:27017/mentriq360
+      # LOCAL mongo (default). Comment this line out to use the Atlas/prod
+      # MONGODB_URI from .env instead. UNCOMMENT to go back to local.
+      # - MONGODB_URI=mongodb://mongo:27017/mentriq360
       # Local-dev settings: no forced HTTPS redirect / secure-only cookies,
       # so the app is usable over plain http://localhost.
       - DJANGO_SETTINGS_MODULE=config.settings.local
