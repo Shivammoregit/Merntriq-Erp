@@ -252,7 +252,9 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_FILTER_BACKENDS": (
-        "django_filters.rest_framework.DjangoFilterBackend",
+        # SafeMongoFilterBackend replaces django_filters' DjangoFilterBackend,
+        # which requires a Django ORM model and breaks on mongoengine querysets.
+        "apps.core.input.SafeMongoFilterBackend",
         "apps.core.input.SafeOrderingFilter",
         "apps.core.input.SafeSearchFilter",
     ),

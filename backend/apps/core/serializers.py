@@ -7,6 +7,93 @@ from django.db import connections
 from rest_framework import serializers
 from rest_framework_mongoengine.serializers import DocumentSerializer
 
+
+# ─── Mongo relation-field compatibility shim ─────────────────────────────────
+# Many serializers list bare relation names (e.g. "campus", "section", "user",
+# "created_by") in Meta.fields. The Mongo models store these as ``<name>_id``
+# StringFields and resolve ``obj.campus`` lazily via AuditDocument.__getattr__.
+# rest_framework_mongoengine can't introspect those at field-build time and
+# raises ImproperlyConfigured, so we map any such bare relation to a read-only
+# field that emits the underlying ``<name>_id`` value (or null when absent).
+class _RelationIdField(serializers.Field):
+    """Read/write a bare relation name (``campus``) via its ``campus_id`` column."""
+
+    def __init__(self, id_source, **kwargs):
+        kwargs["source"] = id_source
+        kwargs.setdefault("required", False)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        return None if data in (None, "") else str(data)
+
+    def to_representation(self, value):
+        return None if value is None else str(value)
+
+
+class _NullField(serializers.Field):
+    """Unknown non-relation field (a Django-era rename with no Mongo column).
+
+    Renders ``null`` and is ignored on write, so it never crashes the endpoint.
+    Such fields should be renamed to their Mongo equivalent for real data.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs["read_only"] = True
+        kwargs["source"] = "*"
+        super().__init__(**kwargs)
+
+    def to_representation(self, value):
+        return None
+
+
+def _build_unknown_field(self, field_name, model_class):
+    id_field = f"{field_name}_id"
+    if id_field in getattr(model_class, "_fields", {}):
+        return (_RelationIdField, {"id_source": id_field})
+    return (_NullField, {})
+
+
+DocumentSerializer.build_unknown_field = _build_unknown_field
+
+
+def _normalize_relation_data(model, data):
+    """Normalize validated_data before a mongoengine save.
+
+    Views frequently pass relation objects (``serializer.save(created_by=user)``)
+    or bare relation names that the Mongo model stores as ``<name>_id``.
+    rest_framework_mongoengine's ``recursive_save`` can't map those, so we
+    convert model instances to their pk, rename ``<name>`` → ``<name>_id`` and
+    drop keys the model doesn't have.
+    """
+    me_fields = getattr(model, "_fields", {})
+    out = {}
+    for key, value in data.items():
+        if hasattr(value, "pk") and hasattr(value, "_meta"):
+            value = str(value.pk)
+        if key in me_fields:
+            out[key] = value
+        elif f"{key}_id" in me_fields:
+            out[f"{key}_id"] = value
+        # else: drop a field the Mongo model doesn't define
+    return out
+
+
+_orig_ds_create = DocumentSerializer.create
+_orig_ds_update = DocumentSerializer.update
+
+
+def _ds_create(self, validated_data):
+    return _orig_ds_create(self, _normalize_relation_data(self.Meta.model, validated_data))
+
+
+def _ds_update(self, instance, validated_data):
+    return _orig_ds_update(self, instance, _normalize_relation_data(self.Meta.model, validated_data))
+
+
+DocumentSerializer.create = _ds_create
+DocumentSerializer.update = _ds_update
+
 from apps.accounts.models import User, UserRole
 
 from .attendance_rules import ensure_attendance_date_is_editable
@@ -199,7 +286,7 @@ def school_connection_status(campus: Campus) -> dict:
 
 
 class SchoolSerializer(DocumentSerializer):
-    schoolId = serializers.IntegerField(source="id", read_only=True)
+    schoolId = serializers.CharField(source="id", read_only=True)
     schoolCode = serializers.CharField(source="code", required=False)
     schoolName = serializers.CharField(source="name")
     logo = serializers.CharField(source="logo_url", required=False, allow_blank=True)
@@ -1719,11 +1806,21 @@ class FeeAssignmentSerializer(DocumentSerializer):
 
 
 class PaymentSerializer(DocumentSerializer):
-    campus = serializers.PrimaryKeyRelatedField(read_only=True)
+    campus = serializers.CharField(source="campus_id", read_only=True)
     campus_name = serializers.CharField(source="campus.name", read_only=True)
-    fee_title = serializers.CharField(source="fee_assignment.title", read_only=True)
-    student_name = serializers.CharField(source="fee_assignment.student.full_name", read_only=True)
+    fee_title = serializers.SerializerMethodField()
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
     outstanding_after_payment = serializers.SerializerMethodField()
+    # Django-era field names mapped to Mongo model equivalents.
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, source="amount")
+    payment_method = serializers.CharField(source="payment_mode", required=False)
+    payment_status = serializers.CharField(source="status", required=False)
+    gateway_name = serializers.CharField(source="gateway", required=False, allow_blank=True)
+
+    def get_fee_title(self, obj) -> str:
+        fee_assignment = getattr(obj, "fee_assignment", None)
+        fee_structure = getattr(fee_assignment, "fee_structure", None) if fee_assignment else None
+        return getattr(fee_structure, "title", "") or ""
 
     class Meta:
         model = Payment
@@ -1770,7 +1867,7 @@ class PaymentSerializer(DocumentSerializer):
         )
 
     def get_outstanding_after_payment(self, obj: Payment) -> str:
-        return str(obj.pending_amount)
+        return str(getattr(obj, "pending_amount", None) or Decimal("0"))
 
     def validate_amount_paid(self, value):
         if value <= 0:
@@ -2781,6 +2878,10 @@ class ApprovalRequestSerializer(DocumentSerializer):
 class AnnouncementSerializer(DocumentSerializer):
     campus_name = serializers.CharField(source="campus.name", read_only=True)
     created_by_name = serializers.SerializerMethodField()
+    # Django-era field names mapped to their Mongo model equivalents.
+    message = serializers.CharField(source="body")
+    is_active = serializers.BooleanField(source="is_published", required=False)
+    publish_on = serializers.DateTimeField(source="published_at", required=False)
 
     class Meta:
         model = Announcement
@@ -2955,7 +3056,7 @@ class AdmissionApplicationSerializer(DocumentSerializer):
 
 class AdmissionDocumentSerializer(DocumentSerializer):
     application_number = serializers.CharField(source="application.application_number", read_only=True)
-    campus = serializers.IntegerField(source="application.campus_id", read_only=True)
+    campus = serializers.CharField(source="application.campus_id", read_only=True)
     campus_name = serializers.CharField(source="application.campus.name", read_only=True)
 
     class Meta:

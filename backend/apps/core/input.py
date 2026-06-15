@@ -6,7 +6,7 @@ import enum
 from typing import Any
 
 from django.core.exceptions import ValidationError
-from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.filters import BaseFilterBackend, OrderingFilter, SearchFilter
 
 # ─── MongoDB operator injection prevention ───────────────────────────────
 _MONGO_OPERATOR_PATTERN = re.compile(r"^\$[a-zA-Z0-9_]+")
@@ -141,6 +141,53 @@ def sanitize_template_variables(variables: dict) -> dict:
 
 
 # ─── Safe DRF filter backends ────────────────────────────────────────────
+
+
+class SafeMongoFilterBackend(BaseFilterBackend):
+    """Mongoengine-compatible replacement for ``DjangoFilterBackend``.
+
+    The stock ``django_filters`` backend builds a ``FilterSet`` from
+    ``queryset.model`` and Django ORM field metadata, which mongoengine
+    querysets don't provide (``'QuerySet' object has no attribute 'model'``),
+    so every viewset declaring ``filterset_fields`` raised a 500.
+
+    This backend reads the view's ``filterset_fields`` and applies simple
+    exact-match filters for any matching query parameters using mongoengine's
+    own ``QuerySet.filter``. MongoDB operator-injection is stripped via
+    ``strip_mongo_operators``. When no recognised params are present the
+    queryset is returned unchanged, so plain list/detail loads never break.
+    """
+
+    def filter_queryset(self, request, queryset, view):
+        fields = getattr(view, "filterset_fields", None)
+        if not fields:
+            return queryset
+
+        field_names = list(fields.keys()) if isinstance(fields, dict) else list(fields)
+        document = getattr(queryset, "_document", None)
+        doc_fields = getattr(document, "_fields", {}) if document is not None else {}
+
+        lookups: dict[str, str] = {}
+        for field in field_names:
+            if field not in request.query_params:
+                continue
+            try:
+                value = strip_mongo_operators(request.query_params.get(field))
+            except ValidationError:
+                continue
+            # Map e.g. ``campus`` → ``campus_id`` when the document stores the id variant.
+            key = field
+            if doc_fields and field not in doc_fields and f"{field}_id" in doc_fields:
+                key = f"{field}_id"
+            lookups[key] = value
+
+        if not lookups:
+            return queryset
+        try:
+            return queryset.filter(**lookups)
+        except Exception:
+            # Never turn a bad filter param into a 500 — fall back to unfiltered.
+            return queryset
 
 
 class SafeSearchFilter(SearchFilter):

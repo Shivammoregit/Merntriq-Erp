@@ -6,7 +6,7 @@ import re
 import secrets
 import string
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO, StringIO
 
@@ -649,8 +649,7 @@ DEFAULT_SAAS_PLANS = {
 
 def active_subscription_for_campus(campus: Campus) -> SchoolSubscription | None:
     return (
-        SchoolSubscription.objects.filter(campus=campus)
-        
+        SchoolSubscription.objects.filter(campus_id=str(campus.id))
         .order_by("-end_date", "-created_at")
         .first()
     )
@@ -659,9 +658,10 @@ def active_subscription_for_campus(campus: Campus) -> SchoolSubscription | None:
 def subscription_limit_snapshot(campus: Campus) -> dict:
     subscription = active_subscription_for_campus(campus)
     plan = subscription.plan if subscription else None
-    student_count = Student.objects.filter(campus=campus, status="active").count()
-    teacher_count = User.objects.filter(school=campus, role=UserRole.TEACHER, is_active=True).count()
+    student_count = Student.objects.filter(campus_id=str(campus.id), status="active").count()
+    teacher_count = CampusMembership.objects.filter(campus_id=str(campus.id), role="teacher").count()
     month_start = timezone.localdate().replace(day=1)
+    month_start_dt = timezone.make_aware(datetime.combine(month_start, datetime.min.time()))
     fallback_plan = (campus.subscription_plan or "").strip().lower()
     return {
         "subscription": {
@@ -682,9 +682,9 @@ def subscription_limit_snapshot(campus: Campus) -> dict:
         "students": {"used": student_count, "limit": plan.student_limit if plan else 0},
         "teachers": {"used": teacher_count, "limit": plan.teacher_limit if plan else 0},
         "storageMb": {"used": 0, "limit": plan.storage_limit_mb if plan else 0},
-        "ai": {"used": AILog.objects.filter(campus=campus, created_at__date__gte=month_start).count(), "limit": plan.ai_monthly_limit if plan else 0},
-        "whatsapp": {"used": OutboundMessage.objects.filter(campus=campus, channel=MessageChannel.WHATSAPP, created_at__date__gte=month_start).count(), "limit": plan.whatsapp_monthly_limit if plan else 0},
-        "sms": {"used": OutboundMessage.objects.filter(campus=campus, channel=MessageChannel.SMS, created_at__date__gte=month_start).count(), "limit": plan.sms_monthly_limit if plan else 0},
+        "ai": {"used": AILog.objects.filter(campus_id=str(campus.id), created_at__gte=month_start_dt).count(), "limit": plan.ai_monthly_limit if plan else 0},
+        "whatsapp": {"used": OutboundMessage.objects.filter(campus_id=str(campus.id), channel=MessageChannel.WHATSAPP, created_at__gte=month_start_dt).count(), "limit": plan.whatsapp_monthly_limit if plan else 0},
+        "sms": {"used": OutboundMessage.objects.filter(campus_id=str(campus.id), channel=MessageChannel.SMS, created_at__gte=month_start_dt).count(), "limit": plan.sms_monthly_limit if plan else 0},
     }
 
 
@@ -1236,7 +1236,11 @@ class RoleScopedModelViewSet(viewsets.ModelViewSet):
         return self.filter_queryset_by_role(queryset)
 
     def audit_entity_type(self) -> str:
-        return self.queryset.model.__name__
+        qs = self.queryset
+        document = getattr(qs, "_document", None)
+        if document is not None:
+            return document.__name__
+        return qs.model.__name__
 
     def write_audit(self, action: str, instance) -> None:
         user = self.request.user
@@ -4068,17 +4072,27 @@ class RealTimeEventStreamView(APIView):
     @extend_schema(responses=OpenApiTypes.STR)
     def get(self, request):
         def event_stream():
-            last_finance_id = int(request.query_params.get("last_finance_id") or 0)
-            last_academic_id = int(request.query_params.get("last_academic_id") or 0)
+            from bson import ObjectId
+
+            raw_finance = request.query_params.get("last_finance_id") or ""
+            raw_academic = request.query_params.get("last_academic_id") or ""
+            last_finance_id = raw_finance if ObjectId.is_valid(raw_finance) else None
+            last_academic_id = raw_academic if ObjectId.is_valid(raw_academic) else None
             while True:
-                finance_events = scoped_finance_events_for_user(request.user).filter(id__gt=last_finance_id).order_by("id")[:20]
-                academic_events = scoped_academic_events_for_user(request.user).filter(id__gt=last_academic_id).order_by("id")[:20]
+                finance_qs = scoped_finance_events_for_user(request.user)
+                if last_finance_id:
+                    finance_qs = finance_qs.filter(id__gt=ObjectId(last_finance_id))
+                finance_events = finance_qs.order_by("id")[:20]
+                academic_qs = scoped_academic_events_for_user(request.user)
+                if last_academic_id:
+                    academic_qs = academic_qs.filter(id__gt=ObjectId(last_academic_id))
+                academic_events = academic_qs.order_by("id")[:20]
                 events: list[dict] = []
                 for event in finance_events:
-                    last_finance_id = event.id
+                    last_finance_id = str(event.id)
                     events.append(normalized_realtime_event("finance", event))
                 for event in academic_events:
-                    last_academic_id = event.id
+                    last_academic_id = str(event.id)
                     events.append(normalized_realtime_event("academic", event))
                 events = sorted(events, key=lambda item: item["createdAt"])
                 if events:
@@ -5481,7 +5495,8 @@ class MobileAppBootstrapView(APIView):
     )
     def get(self, request):
         campus = primary_school_for_user(request.user)
-        notifications = PushNotificationLog.objects.filter(Q(user_id=request.user.pk) | Q(student__user=request.user)).order_by("-created_at")[:10]
+        # PushNotificationLog is keyed by user_id only (no student linkage in the Mongo model).
+        notifications = PushNotificationLog.objects.filter(user_id=request.user.pk).order_by("-created_at")[:10]
         payload = {
             "user": {"id": request.user.id, "username": request.user.username, "role": request.user.role},
             "school": {"id": campus.id, "name": campus.name, "code": campus.code, "logo": campus.logo_url} if campus else None,
@@ -5782,7 +5797,9 @@ class Phase10EcosystemDashboardView(APIView):
                 "total": application_queryset.count(),
                 "approved": application_queryset.filter(status__in=[AdmissionApplicationStatus.APPROVED, AdmissionApplicationStatus.ADMITTED]).count(),
                 "rejected": application_queryset.filter(status=AdmissionApplicationStatus.REJECTED).count(),
-                "revenue": str(application_queryset.filter(payment_status=TransactionStatus.SUCCESS).aggregate(total=Sum("admission_fee_amount")).get("total") or Decimal("0")),
+                # AdmissionApplication has no fee/payment fields in the Mongo model,
+                # so admission revenue is not tracked here.
+                "revenue": "0",
             },
             "transport": {
                 "routes": TransportRoute.objects.filter(**campus_filter).count(),
@@ -5798,7 +5815,7 @@ class Phase10EcosystemDashboardView(APIView):
             },
             "inventory": {
                 "assets": InventoryAsset.objects.filter(**campus_filter).count(),
-                "maintenance": AssetMaintenanceLog.objects.filter(**campus_filter, status=RecordStatus.ACTIVE).count(),
+                "maintenance": AssetMaintenanceLog.objects.filter(**campus_filter).count(),
             },
             "website": {
                 "published": SchoolWebsiteContent.objects.filter(**campus_filter, is_published=True).count(),
@@ -5809,10 +5826,10 @@ class Phase10EcosystemDashboardView(APIView):
             },
             "security": {
                 "activeSessions": DeviceLoginSession.objects.filter(**campus_filter, is_active=True).count(),
-                "openAlerts": SecurityEvent.objects.filter(**campus_filter, resolved_at__isnull=True).count(),
+                "openAlerts": SecurityEvent.objects.filter(**campus_filter, resolved_at=None).count(),
             },
             "audit": {
-                "latestStatus": ProductionAuditRun.objects.filter(**campus_filter).order_by("-created_at").values_list("status", flat=True).first() or "not_run",
+                "latestStatus": getattr(ProductionAuditRun.objects.filter(**campus_filter).order_by("-created_at").first(), "status", None) or "not_run",
             },
         }
         return Response(payload, status=status.HTTP_200_OK)
@@ -6181,20 +6198,28 @@ class EnterpriseAnalyticsView(APIView):
             mrr += amount
         arr = mrr * Decimal("12")
         subscription_count = SchoolSubscription.objects.count()
-        cancelled_or_expired = SchoolSubscription.objects.filter(status__in=[SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED], updated_at__date__gte=month_start).count()
+        month_start_dt = timezone.make_aware(datetime.combine(month_start, datetime.min.time()))
+        cancelled_or_expired = SchoolSubscription.objects.filter(status__in=[SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED], updated_at__gte=month_start_dt).count()
         churn_rate = Decimal("0.00")
         if subscription_count:
             churn_rate = (Decimal(cancelled_or_expired) / Decimal(subscription_count) * Decimal("100.00")).quantize(Decimal("0.01"))
+        # Resolve plan revenue via the payment -> invoice -> subscription -> plan chain.
+        # (mongoengine has no relational joins/aggregation, so build lookup maps in Python.)
         revenue = SubscriptionPayment.objects.filter(payment_status=EnterprisePaymentStatus.SUCCESS)
-        revenue_by_plan = [
-            {"plan": row["invoice__subscription__plan__name"], "amount": str(row["amount"] or Decimal("0"))}
-            for row in revenue.values("invoice__subscription__plan__name").annotate(amount=Sum("amount")).order_by("invoice__subscription__plan__name")
-        ]
-        growth_queryset = SchoolSubscription.objects.values("created_at__date").annotate(count=Count("id")).order_by("created_at__date")
-        growth_rows = [
-            {"date": row["created_at__date"], "subscriptions": row["count"]}
-            for row in list(growth_queryset)[-12:]
-        ]
+        plan_names = {str(p.id): p.name for p in SaaSPlan.objects.only("id", "name")}
+        sub_plan = {str(s.id): plan_names.get(s.plan_id, "Unknown") for s in SchoolSubscription.objects.only("id", "plan_id")}
+        invoice_plan = {str(inv.id): sub_plan.get(inv.subscription_id, "Unknown") for inv in SubscriptionInvoice.objects.only("id", "subscription_id")}
+        revenue_totals: dict[str, Decimal] = {}
+        for pay in revenue.only("invoice_id", "amount"):
+            plan_name = invoice_plan.get(pay.invoice_id, "Unknown")
+            revenue_totals[plan_name] = revenue_totals.get(plan_name, Decimal("0")) + (pay.amount or Decimal("0"))
+        revenue_by_plan = [{"plan": name, "amount": str(amount)} for name, amount in sorted(revenue_totals.items())]
+        growth_counter: dict[str, int] = {}
+        for sub in SchoolSubscription.objects.only("created_at"):
+            if sub.created_at:
+                key = sub.created_at.date().isoformat()
+                growth_counter[key] = growth_counter.get(key, 0) + 1
+        growth_rows = [{"date": d, "subscriptions": c} for d, c in sorted(growth_counter.items())][-12:]
         payload = {
             "mrr": str(mrr.quantize(Decimal("0.01"))),
             "arr": str(arr.quantize(Decimal("0.01"))),
@@ -6204,7 +6229,7 @@ class EnterpriseAnalyticsView(APIView):
             "subscriptionGrowth": growth_rows,
             "revenueAnalytics": {
                 "total": str(revenue.aggregate(total=Sum("amount")).get("total") or Decimal("0")),
-                "monthly": str(revenue.filter(paid_at__date__gte=month_start).aggregate(total=Sum("amount")).get("total") or Decimal("0")),
+                "monthly": str(revenue.filter(paid_at__gte=month_start_dt).aggregate(total=Sum("amount")).get("total") or Decimal("0")),
                 "byPlan": revenue_by_plan,
             },
             "plans": list(SaaSPlan.objects.values("code", "name", "monthly_price", "annual_price", "is_active")),
@@ -6302,7 +6327,8 @@ class EnterpriseMonitoringView(APIView):
         backup_jobs = BackupJob.objects.filter(**campus_filter).order_by("-created_at")[:10]
         queue_jobs = QueueJob.objects.filter(**campus_filter).order_by("-created_at")[:10]
         failed_payments = PaymentTransaction.objects.filter(**({"campus": campus} if campus else {}), status=TransactionStatus.FAILED).count()
-        ai_usage = AILog.objects.filter(**({"campus": campus} if campus else {}), created_at__date__gte=timezone.localdate().replace(day=1)).count()
+        month_start_dt = timezone.make_aware(datetime.combine(timezone.localdate().replace(day=1), datetime.min.time()))
+        ai_usage = AILog.objects.filter(**({"campus": campus} if campus else {}), created_at__gte=month_start_dt).count()
         payload = {
             "scope": campus.code if campus else "platform",
             "health": SystemHealthSnapshotSerializer(latest_health, many=True, context={"request": request}).data,
@@ -6343,135 +6369,182 @@ class DashboardSummaryView(APIView):
             campus_ids = self.admin_campus_ids(user)
             return queryset.filter(campus_id__in=campus_ids) if campus_ids else queryset.none()
         if user.role == UserRole.TEACHER:
-            return queryset.filter(
-                Q(section__class_teacher=user)
-                | Q(section__subject_allocations__teacher=user, section__subject_allocations__is_active=True)
-            ).distinct()
+            # Sections this teacher owns or is allocated to (mongoengine stores ids, not relations).
+            section_ids = set(str(s) for s in ClassSection.objects.filter(class_teacher_id=user.pk).values_list("id", flat=True))
+            section_ids |= set(
+                str(s) for s in TeacherSubjectAllocation.objects.filter(teacher_id=user.pk, is_active=True).values_list("section_id", flat=True)
+            )
+            return queryset.filter(section_id__in=list(section_ids)) if section_ids else queryset.none()
         if user.role == UserRole.STUDENT:
             return queryset.filter(user_id=user.pk)
         return queryset.none()
 
     def scoped_campus_ids(self, user, students):
         if user.role == UserRole.SUPER_ADMIN:
-            return list(Campus.objects.values_list("id", flat=True))
+            return [str(cid) for cid in Campus.objects.values_list("id", flat=True)]
         if user.role in (UserRole.SCHOOL_ADMIN, UserRole.ACCOUNT):
             return self.admin_campus_ids(user) or []
-        if user.role == UserRole.TEACHER:
-            return list(
-                ClassSection.objects.filter(teacher_section_q(user))
-                .values_list("campus_id", flat=True)
-                .distinct()
-            )
-        return list(students.values_list("campus_id", flat=True).distinct())
+        return [str(c) for c in students.values_list("campus_id", flat=True).distinct() if c]
 
     @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         user = request.user
+        today = timezone.localdate()
+        today_str = today.isoformat()
+        month_start = today.replace(day=1)
+        month_start_dt = timezone.make_aware(datetime.combine(month_start, datetime.min.time()))
+        today_start_dt = timezone.make_aware(datetime.combine(today, datetime.min.time()))
+        today_end_dt = today_start_dt + timedelta(days=1)
+
         students = self.scoped_students(user)
-        attendance = AttendanceRecord.objects.filter(student__in=students)
-        fees = FeeAssignment.objects.filter(student__in=students)
-        payments = Payment.objects.filter(fee_assignment__student__in=students)
+        student_ids = [str(sid) for sid in students.values_list("id", flat=True)]
         campus_ids = self.scoped_campus_ids(user, students)
+
+        attendance = AttendanceRecord.objects.filter(student_id__in=student_ids)
+        fees = FeeAssignment.objects.filter(student_id__in=student_ids)
+        payments = Payment.objects.filter(student_id__in=student_ids)
         campuses = Campus.objects.filter(id__in=campus_ids)
         sections = ClassSection.objects.filter(campus_id__in=campus_ids)
         staff_attendance = StaffAttendanceRecord.objects.filter(campus_id__in=campus_ids)
         staff_profiles = StaffProfile.objects.filter(campus_id__in=campus_ids)
-        salary_records = SalaryRecord.objects.filter(campus_id__in=campus_ids)
         payment_transactions = PaymentTransaction.objects.filter(campus_id__in=campus_ids)
-        if user.role == UserRole.TEACHER:
-            salary_records = salary_records.filter(staff_user=user)
         if user.role == UserRole.STUDENT:
-            payment_transactions = payment_transactions.filter(student__user=user)
+            payment_transactions = payment_transactions.filter(student_id__in=student_ids)
         devices = AttendanceDevice.objects.filter(campus_id__in=campus_ids)
         approvals = ApprovalRequest.objects.filter(campus_id__in=campus_ids)
-        tenant_users = User.objects.filter(campus_memberships__campus_id__in=campus_ids).distinct()
-        today = timezone.localdate()
-        today_student_attendance = attendance.filter(date=today)
-        today_staff_attendance = staff_attendance.filter(date=today)
-        notice_scope = Q(campus_id__in=campus_ids)
-        if user.role == UserRole.SUPER_ADMIN:
-            notice_scope |= Q(campus__isnull=True)
-        recent_notices_queryset = Announcement.objects.filter(notice_scope, is_active=True).order_by("-publish_on", "-created_at")[:6]
-        upcoming_exam_queryset = (
-            ExamSchedule.objects.filter(campus_id__in=campus_ids, exam_date__gte=today)
-            
-            .order_by("exam_date", "start_time")[:6]
+        member_user_ids = list(
+            CampusMembership.objects.filter(campus_id__in=campus_ids).values_list("user_id", flat=True)
         )
+        tenant_users = User.objects.filter(id__in=member_user_ids).distinct()
+        today_student_attendance = attendance.filter(date=today_str)
+        today_staff_attendance = staff_attendance.filter(date=today_str)
 
-        total_assigned = sum((fee.payable_amount for fee in fees), Decimal("0"))
-        total_collected = payments.aggregate(total=Sum("amount_paid")).get("total") or Decimal("0")
-        month_start = today.replace(day=1)
-        today_collection = payments.filter(paid_on=today).aggregate(total=Sum("amount_paid")).get("total") or Decimal("0")
-        monthly_collection = payments.filter(paid_on__gte=month_start).aggregate(total=Sum("amount_paid")).get("total") or Decimal("0")
-        pending_fee_amount = sum((fee_outstanding_amount(fee) for fee in fees.exclude(status=FeeStatus.PAID)), Decimal("0"))
-        overdue_fee_amount = sum((fee_outstanding_amount(fee) for fee in fees.filter(Q(status=FeeStatus.OVERDUE) | Q(due_date__lt=today)).exclude(status=FeeStatus.PAID)), Decimal("0"))
-        online_payment_total = payments.filter(payment_method__in=[PaymentMethod.ONLINE, PaymentMethod.UPI, PaymentMethod.CARD, PaymentMethod.NET_BANKING, PaymentMethod.WALLET]).aggregate(total=Sum("amount_paid")).get("total") or Decimal("0")
-        offline_payment_total = payments.filter(payment_method__in=[PaymentMethod.CASH, PaymentMethod.BANK]).aggregate(total=Sum("amount_paid")).get("total") or Decimal("0")
-        teacher_salary_payable = (
-            salary_records.filter(staff_user__role=UserRole.TEACHER, payment_status__in=[SalaryPaymentStatus.DRAFT, SalaryPaymentStatus.PAYABLE])
-            .aggregate(total=Sum("final_salary"))
-            .get("total")
-            or Decimal("0")
-        )
-        staff_salary_payable = (
-            salary_records.exclude(staff_user__role=UserRole.TEACHER)
-            .filter(payment_status__in=[SalaryPaymentStatus.DRAFT, SalaryPaymentStatus.PAYABLE])
-            .aggregate(total=Sum("final_salary"))
-            .get("total")
-            or Decimal("0")
-        )
-        monthly_subscriptions = campuses.aggregate(total=Sum("monthly_subscription_amount")).get("total") or Decimal("0")
-        salary_payable = (
-            salary_records.filter(payment_status__in=[SalaryPaymentStatus.DRAFT, SalaryPaymentStatus.PAYABLE])
-            .aggregate(total=Sum("final_salary"))
-            .get("total")
-            or Decimal("0")
-        )
+        # ── Fee / payment figures ──────────────────────────────────────────
+        # NOTE: best-effort port. The fee-calculation and salary subsystems were
+        # never fully ported to MongoDB, so payable amounts are derived inline
+        # and salary figures report 0 until those models exist.
+        successful_payments = payments.filter(status=TransactionStatus.SUCCESS)
+        total_collected = sum((p.amount or Decimal("0")) for p in successful_payments.only("amount"))
+        today_collection = sum((p.amount or Decimal("0")) for p in successful_payments.filter(paid_at__gte=today_start_dt, paid_at__lt=today_end_dt).only("amount"))
+        monthly_collection = sum((p.amount or Decimal("0")) for p in successful_payments.filter(paid_at__gte=month_start_dt).only("amount"))
+        online_modes = [PaymentMethod.ONLINE, PaymentMethod.UPI, PaymentMethod.CARD, PaymentMethod.NET_BANKING, PaymentMethod.WALLET]
+        online_payment_total = sum((p.amount or Decimal("0")) for p in successful_payments.filter(payment_mode__in=online_modes).only("amount"))
+        offline_payment_total = sum((p.amount or Decimal("0")) for p in successful_payments.filter(payment_mode__in=[PaymentMethod.CASH, PaymentMethod.BANK]).only("amount"))
 
-        attendance_by_status = {
-            item["status"]: item["count"]
-            for item in attendance.values("status").annotate(count=Count("id"))
-        }
-        fees_by_status = {
-            item["status"]: item["count"]
-            for item in fees.values("status").annotate(count=Count("id"))
-        }
+        total_assigned = Decimal("0")
+        pending_fee_amount = Decimal("0")
+        overdue_fee_amount = Decimal("0")
+        fees_by_status: dict[str, int] = {}
+        for fee in fees.only("amount", "late_fee", "discount_amount", "paid_amount", "status", "due_date"):
+            payable = (fee.amount or Decimal("0")) + (fee.late_fee or Decimal("0")) - (fee.discount_amount or Decimal("0"))
+            outstanding = max(payable - (fee.paid_amount or Decimal("0")), Decimal("0"))
+            total_assigned += payable
+            fees_by_status[fee.status] = fees_by_status.get(fee.status, 0) + 1
+            if fee.status != FeeStatus.PAID:
+                pending_fee_amount += outstanding
+                if fee.status == FeeStatus.OVERDUE or (fee.due_date and str(fee.due_date) < today_str):
+                    overdue_fee_amount += outstanding
 
-        section_rows = attendance.values(
-            "section",
-            "section__grade_name",
-            "section__section_name",
-        ).annotate(
-            total=Count("id"),
-            present=Count("id", filter=Q(status=AttendanceStatus.PRESENT)),
-            absent=Count("id", filter=Q(status=AttendanceStatus.ABSENT)),
-        ).order_by("section__grade_name", "section__section_name")
+        monthly_subscriptions = sum((c.monthly_subscription_amount or Decimal("0")) for c in campuses.only("monthly_subscription_amount"))
+        teacher_salary_payable = staff_salary_payable = salary_payable = Decimal("0")
+        subscription_due_count = campuses.filter(subscription_status__ne="active").count()
+
+        # ── Attendance group-bys (mongoengine has no values().annotate()) ──
+        attendance_by_status: dict[str, int] = {}
+        section_agg: dict[str, dict] = {}
+        for rec in attendance.only("status", "section_id"):
+            attendance_by_status[rec.status] = attendance_by_status.get(rec.status, 0) + 1
+            bucket = section_agg.setdefault(rec.section_id, {"total": 0, "present": 0, "absent": 0})
+            bucket["total"] += 1
+            if rec.status == AttendanceStatus.PRESENT:
+                bucket["present"] += 1
+            elif rec.status == AttendanceStatus.ABSENT:
+                bucket["absent"] += 1
+        section_label_map = {str(s.id): s for s in ClassSection.objects.filter(id__in=list(section_agg.keys()))} if section_agg else {}
+        section_rows = []
+        for section_id, agg in section_agg.items():
+            sec = section_label_map.get(section_id)
+            section_rows.append({
+                "section": section_id,
+                "label": f"{sec.grade_name} - {sec.section_name}" if sec else section_id,
+                "total": agg["total"], "present": agg["present"], "absent": agg["absent"],
+            })
+
+        staff_attendance_by_status: dict[str, int] = {}
+        for rec in staff_attendance.only("status"):
+            staff_attendance_by_status[rec.status] = staff_attendance_by_status.get(rec.status, 0) + 1
+        devices_by_type: dict[str, int] = {}
+        for dev in devices.only("device_type"):
+            devices_by_type[dev.device_type] = devices_by_type.get(dev.device_type, 0) + 1
+
+        # ── Recent payments / transactions (manual id → document resolution) ──
+        recent_payment_docs = list(payments.order_by("-paid_at")[:8])
+        recent_txn_docs = list(payment_transactions.order_by("-created_at")[:8])
+        needed_student_ids = {p.student_id for p in recent_payment_docs} | {t.student_id for t in recent_txn_docs if t.student_id}
+        student_cache = {str(s.id): s for s in Student.objects.filter(id__in=list(needed_student_ids))} if needed_student_ids else {}
+
+        def _student_name(sid):
+            st = student_cache.get(sid)
+            return st.full_name if st else ""
 
         recent_payments = [
             {
-                "id": payment.id,
-                "student_name": payment.fee_assignment.student.full_name,
-                "fee_title": payment.fee_assignment.title,
-                "amount_paid": str(payment.amount_paid),
-                "paid_on": payment.paid_on,
-                "payment_method": payment.payment_method,
-                "reference_number": payment.reference_number,
+                "id": str(p.id),
+                "student_name": _student_name(p.student_id),
+                "fee_title": "",
+                "amount_paid": str(p.amount),
+                "paid_on": p.paid_at,
+                "payment_method": p.payment_mode,
+                "reference_number": p.receipt_number,
             }
-            for payment in payments.order_by("-paid_on", "-created_at")[:8]
+            for p in recent_payment_docs
         ]
         recent_transactions = [
             {
-                "id": transaction_obj.id,
-                "student_name": transaction_obj.student.full_name if transaction_obj.student else "",
-                "fee_title": transaction_obj.fee_assignment.title if transaction_obj.fee_assignment else "",
-                "provider": transaction_obj.provider,
-                "amount": str(transaction_obj.amount),
-                "status": transaction_obj.status,
-                "gateway_order_id": transaction_obj.gateway_order_id,
-                "transaction_id": transaction_obj.gateway_payment_id or transaction_obj.transaction_id,
-                "created_at": transaction_obj.created_at,
+                "id": str(t.id),
+                "student_name": _student_name(t.student_id) if t.student_id else "",
+                "fee_title": "",
+                "provider": t.provider,
+                "amount": str(t.amount),
+                "status": t.status,
+                "gateway_order_id": t.gateway_order_id,
+                "transaction_id": t.gateway_payment_id or getattr(t, "transaction_id", ""),
+                "created_at": t.created_at,
             }
-            for transaction_obj in payment_transactions.order_by("-created_at")[:8]
+            for t in recent_txn_docs
+        ]
+
+        # ── Upcoming exams (manual id → document resolution) ──
+        upcoming_exam_docs = list(ExamSchedule.objects.filter(campus_id__in=campus_ids, exam_date__gte=today_str).order_by("exam_date", "start_time")[:6])
+        exam_type_map = {str(e.id): e.name for e in ExamType.objects.filter(id__in=[d.exam_type_id for d in upcoming_exam_docs])} if upcoming_exam_docs else {}
+        exam_subject_map = {str(s.id): s.name for s in Subject.objects.filter(id__in=[d.subject_id for d in upcoming_exam_docs])} if upcoming_exam_docs else {}
+        exam_section_map = {str(s.id): s for s in ClassSection.objects.filter(id__in=[d.section_id for d in upcoming_exam_docs])} if upcoming_exam_docs else {}
+        upcoming_exams = []
+        for exam in upcoming_exam_docs:
+            sec = exam_section_map.get(exam.section_id)
+            upcoming_exams.append({
+                "id": str(exam.id),
+                "title": exam.title,
+                "exam_type": exam_type_map.get(exam.exam_type_id, ""),
+                "section": f"{sec.grade_name} - {sec.section_name}" if sec else "",
+                "subject": exam_subject_map.get(exam.subject_id, ""),
+                "exam_date": exam.exam_date,
+                "start_time": exam.start_time,
+                "status": exam.status,
+            })
+
+        # ── Recent notices ──
+        notice_docs = list(Announcement.objects.filter(campus_id__in=campus_ids, is_published=True).order_by("-published_at", "-created_at")[:6])
+        notice_campus_map = {str(c.id): c.name for c in Campus.objects.filter(id__in=[n.campus_id for n in notice_docs])} if notice_docs else {}
+        recent_notices = [
+            {
+                "id": str(n.id),
+                "title": n.title,
+                "audience": n.audience,
+                "campus": notice_campus_map.get(n.campus_id, "All schools"),
+                "publish_on": n.published_at,
+            }
+            for n in notice_docs
         ]
 
         return Response(
@@ -6488,7 +6561,7 @@ class DashboardSummaryView(APIView):
                     "active": campuses.filter(status="active").count(),
                     "inactive": campuses.filter(status="inactive").count(),
                     "suspended": campuses.filter(status="suspended").count(),
-                    "subscription_due": campuses.exclude(subscription_status="active").count(),
+                    "subscription_due": subscription_due_count,
                 },
                 "users": {
                     "total": tenant_users.count(),
@@ -6503,23 +6576,14 @@ class DashboardSummaryView(APIView):
                     "today_present": today_student_attendance.filter(status=AttendanceStatus.PRESENT).count(),
                     "today_absent": today_student_attendance.filter(status=AttendanceStatus.ABSENT).count(),
                     "by_status": attendance_by_status,
-                    "by_section": [
-                        {
-                            "section": row["section"],
-                            "label": f"{row['section__grade_name']} - {row['section__section_name']}",
-                            "total": row["total"],
-                            "present": row["present"],
-                            "absent": row["absent"],
-                        }
-                        for row in section_rows
-                    ],
+                    "by_section": section_rows,
                 },
                 "fees": {
                     "total_assigned": str(total_assigned),
                     "total_collected": str(total_collected),
                     "total_outstanding": str(max(total_assigned - total_collected, Decimal("0"))),
                     "monthly_subscriptions": str(monthly_subscriptions),
-                    "pending_school_payments": campuses.exclude(subscription_status="active").count(),
+                    "pending_school_payments": subscription_due_count,
                     "salary_payable": str(salary_payable),
                     "by_status": fees_by_status,
                 },
@@ -6547,18 +6611,12 @@ class DashboardSummaryView(APIView):
                     "today_present": today_staff_attendance.filter(status=StaffAttendanceStatus.PRESENT).count(),
                     "today_absent": today_staff_attendance.filter(status=StaffAttendanceStatus.ABSENT).count(),
                     "today_late": today_staff_attendance.filter(status=StaffAttendanceStatus.LATE).count(),
-                    "by_status": {
-                        item["status"]: item["count"]
-                        for item in staff_attendance.values("status").annotate(count=Count("id"))
-                    },
+                    "by_status": staff_attendance_by_status,
                 },
                 "devices": {
                     "total": devices.count(),
                     "active": devices.filter(status="active").count(),
-                    "by_type": {
-                        item["device_type"]: item["count"]
-                        for item in devices.values("device_type").annotate(count=Count("id"))
-                    },
+                    "by_type": devices_by_type,
                 },
                 "approvals": {
                     "pending": approvals.filter(status=ApprovalStatus.PENDING).count(),
@@ -6566,28 +6624,7 @@ class DashboardSummaryView(APIView):
                     "rejected": approvals.filter(status=ApprovalStatus.REJECTED).count(),
                 },
                 "recent_payments": recent_payments,
-                "upcoming_exams": [
-                    {
-                        "id": exam.id,
-                        "title": exam.title,
-                        "exam_type": exam.exam_type.name,
-                        "section": f"{exam.section.grade_name} - {exam.section.section_name}",
-                        "subject": exam.subject.name,
-                        "exam_date": exam.exam_date,
-                        "start_time": exam.start_time,
-                        "status": exam.status,
-                    }
-                    for exam in upcoming_exam_queryset
-                ],
-                "recent_notices": [
-                    {
-                        "id": notice.id,
-                        "title": notice.title,
-                        "audience": notice.audience,
-                        "campus": notice.campus.name if notice.campus else "All schools",
-                        "publish_on": notice.publish_on,
-                    }
-                    for notice in recent_notices_queryset
-                ],
+                "upcoming_exams": upcoming_exams,
+                "recent_notices": recent_notices,
             }
         )

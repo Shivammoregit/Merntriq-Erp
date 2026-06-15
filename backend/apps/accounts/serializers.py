@@ -186,7 +186,7 @@ class UserSerializer(serializers.ModelSerializer):
             if not student:
                 return None
             return {
-                "id": student.id,
+                "id": str(student.id),
                 "admission_number": student.admission_number,
                 "first_name": student.first_name,
                 "last_name": student.last_name,
@@ -203,7 +203,7 @@ class UserSerializer(serializers.ModelSerializer):
             if not staff:
                 return None
             return {
-                "id": staff.id,
+                "id": str(staff.id),
                 "employee_code": staff.employee_code,
                 "designation": staff.designation,
                 "department": staff.department,
@@ -278,7 +278,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
             if not student:
                 return None
             return {
-                "id": student.id,
+                "id": str(student.id),
                 "admission_number": student.admission_number,
                 "first_name": student.first_name,
                 "last_name": student.last_name,
@@ -295,7 +295,7 @@ class UserAdminSerializer(serializers.ModelSerializer):
             if not staff:
                 return None
             return {
-                "id": staff.id,
+                "id": str(staff.id),
                 "employee_code": staff.employee_code,
                 "designation": staff.designation,
                 "department": staff.department,

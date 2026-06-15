@@ -175,6 +175,8 @@ class SecurityEventTypeEnum(str, enum.Enum):
     TWO_FACTOR = "two_factor"
     IP_BLOCKED = "ip_blocked"
     SUSPICIOUS_ACTIVITY = "suspicious_activity"
+    SERVER_ERROR = "server_error"
+    CLIENT_ERROR = "client_error"
 
 class ProductionAuditStatusEnum(str, enum.Enum):
     QUEUED = "queued"
@@ -458,21 +460,31 @@ def _resolve_target_model(source_cls, ref_name: str) -> type[Document] | None:
         "approved_by": "User",
         "registered_by": "User",
         "authorized_by": "User",
+        "resolved_by": "User",
         "campus": "Campus",
         "user": "User",
+        "staff_user": "User",
+        "teacher": "User",
+        "class_teacher": "User",
+        "actor": "User",
     }
     mapped = _COMMON_REF_MAP.get(ref_name)
     if mapped and mapped in _MODEL_REGISTRY:
         return _MODEL_REGISTRY[mapped]
-    # 3. Try auto-detection from model registry
-    candidates = []
-    for model_name, model_cls in _MODEL_REGISTRY.items():
-        if model_name.lower() == ref_name.lower():
-            candidates.append(model_cls)
-        elif model_name.lower().endswith(ref_name.lower()):
-            candidates.append(model_cls)
+    # 3. Exact / CamelCase match (e.g. exam_type → ExamType)
+    camel = ref_name.replace("_", " ").title().replace(" ", "")
+    for key in (ref_name, ref_name.lower(), camel):
+        if key in _MODEL_REGISTRY:
+            return _MODEL_REGISTRY[key]
+    # 4. Unique suffix match (e.g. section → ClassSection, session → AcademicSession).
+    #    Dedupe by class — the registry holds both ``Name`` and ``name`` keys.
+    candidates = {
+        model_cls
+        for model_name, model_cls in _MODEL_REGISTRY.items()
+        if model_name.lower().endswith(ref_name.lower())
+    }
     if len(candidates) == 1:
-        return candidates[0]
+        return next(iter(candidates))
     return None
 
 
