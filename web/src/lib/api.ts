@@ -235,15 +235,25 @@ async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
+    let detail = "";
     try {
       const err = await res.json();
-      detail = err.detail ?? err.non_field_errors?.[0] ?? JSON.stringify(err);
+      if (typeof err.detail === "string") {
+        detail = err.detail;
+      } else if (Array.isArray(err.non_field_errors) && typeof err.non_field_errors[0] === "string") {
+        detail = err.non_field_errors[0];
+      } else if (err && typeof err === "object") {
+        const firstField = Object.values(err).find((v) => Array.isArray(v) && typeof (v as string[])[0] === "string") as string[] | undefined;
+        if (firstField) detail = firstField[0];
+      }
     } catch { /* ignore */ }
-    if (res.status === 429) {
-      detail = "Too many requests. Please wait a moment and try again.";
+    if (res.status >= 500) {
+      throw new ApiError(res.status, "Something went wrong. Please try again later.");
     }
-    throw new ApiError(res.status, detail);
+    if (res.status === 429) {
+      throw new ApiError(res.status, "Too many requests. Please wait a moment and try again.");
+    }
+    throw new ApiError(res.status, detail || "An unexpected error occurred. Please try again.");
   }
 
   // 204 No Content
@@ -298,12 +308,22 @@ async function apiDownload(path: string, options: RequestInit = {}, retried = fa
   }
 
   if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
+    let detail = "";
     try {
       const err = await res.json();
-      detail = err.detail ?? err.non_field_errors?.[0] ?? JSON.stringify(err);
+      if (typeof err.detail === "string") {
+        detail = err.detail;
+      } else if (Array.isArray(err.non_field_errors) && typeof err.non_field_errors[0] === "string") {
+        detail = err.non_field_errors[0];
+      } else if (err && typeof err === "object") {
+        const firstField = Object.values(err).find((v) => Array.isArray(v) && typeof (v as string[])[0] === "string") as string[] | undefined;
+        if (firstField) detail = firstField[0];
+      }
     } catch { /* ignore */ }
-    throw new ApiError(res.status, detail);
+    if (res.status >= 500) {
+      throw new ApiError(res.status, "Something went wrong. Please try again later.");
+    }
+    throw new ApiError(res.status, detail || "An unexpected error occurred. Please try again.");
   }
 
   return res.blob();

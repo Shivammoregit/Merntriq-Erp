@@ -85,7 +85,20 @@ export function LoginPage() {
       await login(username.trim(), password, captchaChallenge.challenge_id, captcha.trim());
     } catch (err) {
       console.error("[Mentriq360] Login failed:", err);
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Login failed. Please try again.");
+      let message = "Login failed. Please try again.";
+      if (err instanceof ApiError) {
+        const lower = err.message.toLowerCase();
+        if (lower.includes("captcha")) {
+          message = "Incorrect captcha. Please try again.";
+        } else if (err.status === 403 || err.status === 401) {
+          message = "Incorrect credentials. Please check your username and password.";
+        } else {
+          message = err.message;
+        }
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      setError(message);
       void loadCaptcha(false);
     } finally {
       setBusy(false);
